@@ -7,7 +7,10 @@
   let id_or_kwd =
     let h = Hashtbl.create 17 in
 	List.iter (fun (w, t) -> Hashtbl.add h w t)
-	  [ ];
+	  [ "import", IMPORT; "package", PACKAGE; "return", RETURN;
+	  	"func", FUNC; "var", VAR; "struct", STRUCT; "for", FOR;
+		"type", TYPE; "if", IF; "else", ELSE; "nil", CST Cnil;
+	  	"true", CST (Cbool true); "false", CST (Cbool false); ];
 	fun id -> try Hashtbl.find h id
 		   	  with Not_found -> Ident id
 

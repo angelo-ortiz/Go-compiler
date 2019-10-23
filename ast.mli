@@ -64,4 +64,6 @@ and decl =
   | Dstruct of ident * vars list
   | Dfun of ident * vars list * retty * block
 
-and file = bool * decl list
+type file = {
+    imp : bool;
+    decls : decl list; }
