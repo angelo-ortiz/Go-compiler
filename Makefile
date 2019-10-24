@@ -1,6 +1,7 @@
 CMO=lexer.cmo parser.cmo main.cmo #interp.cmo
 GENERATED=lexer.ml parser.ml parser.mli
 BIN=pgoc
+TEST=./test.sh
 FLAGS=
 
 all: $(BIN)
@@ -9,19 +10,6 @@ all: $(BIN)
 .PHONY: test_syntax #test_typing test_exec
 
 test_syntax: $(BIN)
-	#for f in tests/syntax/bad/*.go; do ./$(BIN) --parse-only $$f 2> /dev/null && { echo "parsing of $$f did not failed!"; exit 1; }; done
-	#for f in tests/syntax/good/*.go; do ./$(BIN) --parse-only $$f || { echo "parsing of $$f failed!"; exit 1; }; done
-	#for f in tests/typing/*/*.go; do ./$(BIN) --parse-only $$f || { echo "parsing of $$f failed!"; exit 1; }; done
-	#for f in tests/exec*/*.go; do ./$(BIN) --parse-only $$f || { echo "parsing of $$f failed!"; exit 1; }; done
-
-test_typing: $(BIN)
-	for f in tests/typing/bad/*.go; do ./$(BIN) --type-only $$f; if [ $? -neq 1 ]; then FAIL; fi; done
-	for f in tests/typing/good/*.go; do ./$(BIN) --type-only $$f; if [ $? -neq 0 ]; then FAIL; fi; done
-	for f in tests/exec*/*.go; do ./$(BIN) --type-only $$f; if [ $? -neq 0 ]; then FAIL; fi; done
-
-test_exec: $(BIN)
-	for f in tests/exec-fail/*.go; do ./$(BIN) $$f; if [ $? -neq 1 ]; then FAIL; fi; done
-	for f in tests/exec/*.go; do ./$(BIN) $$f; if [ $? -neq 0 ]; then FAIL; fi; done
 
 $(BIN): $(CMO)
 	ocamlc $(FLAGS) -o $(BIN) $(CMO) #zarith.cma

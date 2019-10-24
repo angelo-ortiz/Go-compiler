@@ -34,7 +34,7 @@ let () =
   let ch = open_in file in
   let lb = Lexing.from_channel ch in
   try
-    let f = Parser.file Lexer.token lb in
+    let f = Parser.file Lexer.next_token lb in
     close_in ch;
     if !parse_only then exit 0;
     (* typing here *)
@@ -50,5 +50,5 @@ let () =
      exit 1
   (* typing here *)
   | e ->
-     Format.eprintf "unrecognised error: %s@." (Printexc.to_string e);
+     Format.eprintf "unrecognised error: \027[91m%s\027[0m@." (Printexc.to_string e);
      exit 2
