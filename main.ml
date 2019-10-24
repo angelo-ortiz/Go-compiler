@@ -26,8 +26,8 @@ let file =
 
 let report (b, e) =
   let line = b.pos_lnum in
-  let fchar = b.pos_cnum - b.pos_bol in
-  let lchar = e.pos_cnum - e.pos_bol in
+  let fchar = b.pos_cnum - b.pos_bol + 1 in
+  let lchar = e.pos_cnum - e.pos_bol +1 in
   Format.eprintf "File \"%s\", line %d, characters %d-%d:\n" file line fchar lchar
 
 let () =
@@ -41,12 +41,12 @@ let () =
     if !type_only then exit 0;
   with
   | Lexer.Lexing_error s ->
-     report (lexeme_start_p, lexeme_end_p lb);
-     Format.eprintf "lexical error \027[91m%s\027[0m@." s;
+     report (lexeme_start_p lb, lexeme_end_p lb);
+     Format.eprintf "lexical error: \027[91m%s\027[0m@." s;
      exit 1
   | Parser.Error ->
-     report (lexeme_start_p, lexeme_end_p lb);
-     Format.eprintf "syntax@.";
+     report (lexeme_start_p lb, lexeme_end_p lb);
+     Format.eprintf "syntax error@.";
      exit 1
   (* typing here *)
   | e ->

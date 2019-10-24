@@ -64,8 +64,8 @@ echo -n "mauvais "
 for f in syntax/bad/*.go; do
     echo -n ".";
     max=`expr $max + 1`;
-    compile --parse-only $f;
-    case $? in
+	compile --parse-only $f;
+	case $? in
 	"0")
 	echo
 	echo "ECHEC sur "$f" (devrait échouer)";;
