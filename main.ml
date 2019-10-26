@@ -6,7 +6,7 @@ open Parser
 
 let usage = "usage: pgoc [options] file.go"
 
-let parse_only = ref false
+let parse_only = ref true (* false *)
 let type_only = ref false
 
 let spec =
@@ -46,7 +46,7 @@ let () =
      exit 1
   | Parser.Error ->
      report (lexeme_start_p lb, lexeme_end_p lb);
-     Format.eprintf "syntax error@.";
+     Format.eprintf "syntax error: \027[91m%s\027[0m@." (lexeme lb);
      exit 1
   (* typing here *)
   | e ->

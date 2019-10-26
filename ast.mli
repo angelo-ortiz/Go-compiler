@@ -28,8 +28,8 @@ type constant =
 
 type expr =
   | Ecst of constant
-  | Eaccess of expr * ident
   | Eident of ident
+  | Eaccess of expr * ident
   | Ecall of ident * expr list
   | Eprint of expr list
   | Eunop of unop * expr
@@ -48,9 +48,9 @@ and stmt =
   | Sexec of instr
   | Sblock of block
   | Sif of stif
-  | Sinit of ident list * ty * expr list
+  | Sinit of ident list * ty option * expr list
   | Sreturn of expr list
-  | Sfor of instr * expr * instr * block
+  | Sfor of instr option * expr * instr option * block
 
 and stelse =
   | ELblock of block
@@ -62,7 +62,7 @@ and vars = ident list * ty
          
 and decl =
   | Dstruct of ident * vars list
-  | Dfun of ident * vars list * retty * block
+  | Dfun of ident * vars list * retty option * block
 
 type file = {
     imp : bool;
