@@ -7,9 +7,9 @@
   let id_or_kwd =
     let h = Hashtbl.create 17 in
 	List.iter (fun (w, t) -> Hashtbl.add h w t)
-	  [ "import", IMPORT; "package", PACKAGE; "return", RETURN;
-	  	"func", FUNC; "var", VAR; "struct", STRUCT; "for", FOR;
-		"type", TYPE; "if", IF; "else", ELSE; "nil", CST Cnil;
+	  [ "return", RETURN; "func", FUNC; "var", VAR;
+	  	"struct", STRUCT; "for", FOR; "type", TYPE;
+		"if", IF; "else", ELSE; "nil", CST Cnil;
 	  	"true", CST (Cbool true); "false", CST (Cbool false); ];
 	fun id -> try Hashtbl.find h id
 		   	  with Not_found -> IDENT id
@@ -27,7 +27,7 @@ let ident = alpha (alpha | decimal)*
 let hexa = decimal | ['a'-'f' 'A'-'F']
 let integer = decimal+ | '0' ['x' 'X'] hexa+
 let space = [' ' '\t']
-let char = '\'' ([^'\\' '"' '\''] | '\\' ['\\' '"' 'n' 't']) '\''
+let chr = '\'' ([^'\\' '"' '\''] | '\\' ['\\' '"' 'n' 't']) '\''
 
 rule token = parse
   | "//" [^'\n']* '\n'
@@ -38,7 +38,7 @@ rule token = parse
   | "fmt" space* "." 		{ print lexbuf }
   | integer as n			{ try CST (Cint (Int64.of_string n)) with Failure _ ->
   			   				  raise (Lexing_error (Format.sprintf "%s does not fit in 64b@." n)) }
-  | '"' char* '"' as str	{ CST (Cstring str) }
+  | '"' chr* '"' as str	{ CST (Cstring str) }
   | "/*"	  	  	 		{ comment lexbuf }
   | ":="					{ ASSIGN }
   | "=="					{ CMP Beq }
@@ -72,21 +72,21 @@ and import = parse
   | space+					{ import lexbuf }
   | "\"fmt\""				{ IMPORT }
   | _						{ raise (Lexing_error "unknown package") }
-  | eof						{ raise (Lexing_error "no package given") }
+  | eof						{ raise (Lexing_error "expected a name of package to be imported") }
 
 and package = parse
   | '\n'					{ new_line lexbuf; package lexbuf }
   | space+					{ package lexbuf }
   | "main"					{ PACKAGE }
   | _						{ raise (Lexing_error "package name must be `main`") }
-  | eof						{ raise (Lexing_error "no package given") }
+  | eof						{ raise (Lexing_error "expected a package name") }
 
 and print = parse
   | '\n'					{ new_line lexbuf; print lexbuf }
   | space+					{ print lexbuf }
   | "Print"					{ PRINT }
   | _ 						{ raise (Lexing_error "unknown fmt function") }
-  | eof						{ raise (Lexing_error "no function given") }
+  | eof						{ raise (Lexing_error "expected a function name") }
 
 and	comment = parse
   | "*/"					{ token lexbuf }
@@ -109,8 +109,43 @@ and	comment = parse
 	  	 let t = token lb in
 		 if !smcolon_state = Some true then
 		   begin
-			 if t = END then ( smcolon_state := Some false; END )
-			 else ( next := Some t; smcolon_state := None; SMCOLON )
+		     next := Some t;
+			 if t = END then SMCEND
+			 else SMCOLON
+		   end
+		 else 
+		   begin
+			 add_semicolon t;
+			 if t = SMCOLON then
+			   begin
+			     let nt = token lb in
+				 next := Some nt;
+				 if nt = END then SMCEND
+				 else SMCOLON
+			   end
+			 else t
+		   end
+	  | Some t ->
+	  	 add_semicolon t;
+		 next := None;
+		 if t = SMCOLON then
+		   begin
+		     let nt = token lb in
+			 next := Some nt;
+			 if nt = END then SMCEND
+ 			 else SMCOLON
+		   end
+		 else t
+
+(*
+match !next with
+	  | None ->
+	  	 let t = token lb in
+		 if !smcolon_state = Some true then
+		   begin
+		     next := Some t
+			 if t = END then SMCEND
+			 else SMCOLON
 		   end
 		 else 
 		   begin
@@ -118,8 +153,9 @@ and	comment = parse
 			 if t = SMCOLON then
 			   let nt = token lb in
 			   begin
-			     if nt = END then ( smcolon_state := Some false; END )
-				 else ( next := Some nt; smcolon_state := None; SMCOLON )
+			     next := Some nt;
+			     if nt = END then SMCEND
+				 else SMCOLON
 		   	   end
 			 else t
 		   end
@@ -133,5 +169,6 @@ and	comment = parse
 			 else ( next := Some nt; smcolon_state := None; SMCOLON )
 		   end
 		 else t
+		 *)
 
 }

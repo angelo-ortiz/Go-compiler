@@ -1,8 +1,36 @@
 
- /* Go parser  */
+ /* Go parser */
 
 %{
-  open Ast
+	open Ast
+	   
+	let string_of_unop = function
+	  | Unot -> "!" | Uneg -> "-" | Udref -> "*" | Uaddr -> "&"
+														  
+	let string_of_binop = function
+	  | Badd -> "+" | Bsub -> "-"  | Bmul -> "*" | Bdiv -> "/" | Bmod -> "%"
+	  | Beq -> "==" | Bneq -> "!=" | Blt -> "<" | Ble -> "<=" | Bgt -> ">"
+	  | Bge -> ">=" | Band -> "&&" | Bor -> "||"
+										  
+	let string_of_constant = function
+	  | Cint n -> Int64.to_string n
+	  | Cstring str -> str
+	  | Cbool b -> if b then "true" else "false"
+	  | Cnil -> "nil"
+			  
+	let rec string_of_expr = function
+	  | Ecst cst -> string_of_constant cst
+	  | Eident id -> "variable " ^ id
+	  | Eaccess (exp, field) -> (string_of_expr exp) ^ ".(" ^ field ^ ")"
+	  | Ecall (f, args) -> f ^ "(...)"
+	  | Eprint _ -> "fmt.Print(...)"
+	  | Eunop (op, expr) -> (string_of_unop op) ^ (string_of_expr expr)
+	  | Ebinop (op, l, r) -> (string_of_expr l) ^ (string_of_binop op) ^ (string_of_expr r)
+						   
+	let get_ident = function
+	  | Eident id -> id
+	  | _ as exp -> failwith ("expected an identifier, but got " ^ (string_of_expr exp))
+				  
 %}
 
 /* %token TYPE RETTYPE */
@@ -14,12 +42,10 @@
 %token INCR DECR SET ASSIGN
 %token IMPORT PACKAGE STRUCT
 %token FUNC VAR TYPE RETURN
-%token FOR IF ELSE
-%token PRINT
-%token BEGIN END LPAR RPAR SMCOLON COMMA EOF
+%token FOR IF ELSE PRINT
+%token SMCOLON SMCEND COMMA COMMEND
+%token BEGIN END LPAR RPAR EOF
 
-%nonassoc IDENT
-%nonassoc COMMA
 %left OR
 %left AND
 %left CMP
@@ -42,11 +68,11 @@ file:
 decl:
   | TYPE s = IDENT STRUCT BEGIN END SMCOLON
 	{ Dstruct (s, []) }
-  | TYPE s = IDENT STRUCT BEGIN fields = separated_nonempty_list(SMCOLON, vars) END SMCOLON
+  | TYPE s = IDENT STRUCT BEGIN fields = separated_nonempty_list(SMCOLON, vars) SMCEND? END SMCOLON
 	{ Dstruct (s, fields) }
   | FUNC f = IDENT LPAR RPAR retty = retty? block = block SMCOLON
 	{ Dfun (f, [], retty, block) }
-  | FUNC f = IDENT LPAR params = separated_nonempty_list(COMMA, vars) RPAR retty = retty? block = block SMCOLON
+  | FUNC f = IDENT LPAR params = separated_nonempty_list(COMMA, vars) COMMEND? RPAR retty = retty? block = block SMCOLON
 	{ Dfun (f, params, retty, block) }
 ;
 
@@ -65,14 +91,14 @@ ty:
 retty:
   | ty = ty
 	{ RTsingle ty }
-  | LPAR tys = separated_nonempty_list(COMMA, ty) RPAR
+  | LPAR tys = separated_nonempty_list(COMMA, ty) COMMEND? RPAR
 	{ RTtuple tys }
 ;
 
 block:
   | BEGIN END
 	{ [] }
-  | BEGIN stmts = separated_nonempty_list(SMCOLON, stmt) END
+  | BEGIN stmts = separated_nonempty_list(SMCOLON, stmt) SMCEND? END
 	{ stmts }
 ;
 
@@ -113,8 +139,8 @@ instr:
 	{ Idecr e }
   | es = separated_nonempty_list(COMMA, expr) SET vs = separated_nonempty_list(COMMA, expr)
 	{ Iset (es, vs)  }
-  | vars = separated_nonempty_list(COMMA, IDENT) ASSIGN values = separated_nonempty_list(COMMA, expr)
-	{ Iassign (vars, values) }
+  | vars = separated_nonempty_list(COMMA, expr) ASSIGN values = separated_nonempty_list(COMMA, expr)
+	{ Iassign (List.map (get_ident) vars, values) }
 ;
 
 expr:

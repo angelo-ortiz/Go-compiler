@@ -48,6 +48,10 @@ let () =
      report (lexeme_start_p lb, lexeme_end_p lb);
      Format.eprintf "syntax error: \027[91m%s\027[0m@." (lexeme lb);
      exit 1
+  | Failure msg ->
+     report (lexeme_start_p lb, lexeme_end_p lb);
+     Format.eprintf "syntax error: \027[91m%s\027[0m@." msg;
+     exit 1
   (* typing here *)
   | e ->
      Format.eprintf "unrecognised error: \027[91m%s\027[0m@." (Printexc.to_string e);
