@@ -97,10 +97,8 @@ retty:
 ;
 
 block:
-  | BEGIN /* SMCOLON* */ SMCEND? END 
-	{ [] }
-  | BEGIN stmts = separated_nonempty_list(SMCOLON, stmt) SMCEND? END
-	{ stmts }
+  | BEGIN stmts = separated_nonempty_list(SMCOLON, stmt?) SMCEND? END
+	{ List.fold_right (fun x l -> match x with | None -> l | Some y -> y::l) stmts [] }
 ;
 
 stmt:

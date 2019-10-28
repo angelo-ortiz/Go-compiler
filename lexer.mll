@@ -159,38 +159,4 @@ and	comment = parse
 		   end
 		 else t
 
-(*
-match !next with
-	  | None ->
-	  	 let t = token lb in
-		 if !smcolon_state = Some true then
-		   begin
-		     next := Some t
-			 if t = END then SMCEND
-			 else SMCOLON
-		   end
-		 else 
-		   begin
-			 add_semicolon t;
-			 if t = SMCOLON then
-			   let nt = token lb in
-			   begin
-			     next := Some nt;
-			     if nt = END then SMCEND
-				 else SMCOLON
-		   	   end
-			 else t
-		   end
-	  | Some t ->
-	  	 add_semicolon t;
-		 next := None;
-		 if t = SMCOLON then
-		   let nt = token lb in
-		   begin
-		     if nt = END then ( smcolon_state := Some false; END )
-			 else ( next := Some nt; smcolon_state := None; SMCOLON )
-		   end
-		 else t
-		 *)
-
 }
