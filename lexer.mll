@@ -8,11 +8,13 @@
     let h = Hashtbl.create 17 in
 	List.iter (fun (w, t) -> Hashtbl.add h w t)
 	  [ "return", RETURN; "func", FUNC; "var", VAR;
-	  	"struct", STRUCT; "for", FOR; "type", TYPE;
+	  	"struct", STRUCT; "type", TYPE; "for", FOR;
 		"if", IF; "else", ELSE; "nil", CST Cnil;
 	  	"true", CST (Cbool true); "false", CST (Cbool false); ];
 	fun id -> try Hashtbl.find h id
 		   	  with Not_found -> IDENT id
+
+  let str_buf = Buffer.create 1024
 
   let smcolon_state = ref None
 
@@ -27,7 +29,7 @@ let ident = alpha (alpha | decimal)*
 let hexa = decimal | ['a'-'f' 'A'-'F']
 let integer = decimal+ | '0' ['x' 'X'] hexa+
 let space = [' ' '\t']
-let chr = '\'' ([^'\\' '"' '\''] | '\\' ['\\' '"' 'n' 't']) '\''
+let chr = '\'' ([^'\\' '\"' '\''] | '\\' ['\\' '\"' 'n' 't']) '\''
 
 rule token = parse
   | "//" [^'\n']* '\n'
@@ -35,10 +37,9 @@ rule token = parse
   | space+					{ token lexbuf }
   | "import" 				{ import lexbuf }
   | "package" 				{ package lexbuf }
-  | "fmt" space* "." 		{ print lexbuf }
   | integer as n			{ try CST (Cint (Int64.of_string n)) with Failure _ ->
   			   				  raise (Lexing_error (Format.sprintf "%s does not fit in 64b@." n)) }
-  | '"' chr* '"' as str	{ CST (Cstring str) }
+  | '"'						{ CST (Cstring (string lexbuf)) }
   | "/*"	  	  	 		{ comment lexbuf }
   | ":="					{ ASSIGN }
   | "=="					{ CMP Beq }
@@ -49,6 +50,8 @@ rule token = parse
   | ">="					{ CMP Bge }
   | "&&"					{ AND }
   | "||"					{ OR }
+  | "++"					{ INCR }
+  | "--"					{ DECR }
   |	'='						{ SET }
   | '{'						{ BEGIN }
   | '}'						{ END }
@@ -60,12 +63,24 @@ rule token = parse
   | '/'						{ DIV }
   | '%'						{ MOD }
   | '&'						{ ADDR }
+  | '!'						{ NOT }
   | ','						{ COMMA }
   | ';'						{ SMCOLON }
+  | '.'						{ DOT }
   | ident as str			{ id_or_kwd str }
   | "//" [^'\n']* eof
   | eof 	  	  	 		{ EOF }
   | _ as c	  	  	 		{ raise (Lexing_error (Format.sprintf "unexpected %c@." c)) }
+
+and string = parse
+  | '"'   					{ let str = Buffer.contents str_buf in
+  							  Buffer.reset str_buf; str }
+  | "\\\\"					{ Buffer.add_char str_buf '\\'; string lexbuf }
+  | "\\\""					{ Buffer.add_char str_buf '\"'; string lexbuf }
+  | "\\n"					{ Buffer.add_char str_buf '\n'; string lexbuf }
+  | "\\t"					{ Buffer.add_char str_buf '\t'; string lexbuf }
+  | _ as c					{ Buffer.add_char str_buf c; string lexbuf }
+  | eof	 					{ raise (Lexing_error (Format.sprintf "eof while scanning string@.")) }
 
 and import = parse
   | '\n'					{ new_line lexbuf; import lexbuf }
@@ -80,13 +95,6 @@ and package = parse
   | "main"					{ PACKAGE }
   | _						{ raise (Lexing_error "package name must be `main`") }
   | eof						{ raise (Lexing_error "expected a package name") }
-
-and print = parse
-  | '\n'					{ new_line lexbuf; print lexbuf }
-  | space+					{ print lexbuf }
-  | "Print"					{ PRINT }
-  | _ 						{ raise (Lexing_error "unknown fmt function") }
-  | eof						{ raise (Lexing_error "expected a function name") }
 
 and	comment = parse
   | "*/"					{ token lexbuf }
@@ -123,6 +131,13 @@ and	comment = parse
 				 if nt = END then SMCEND
 				 else SMCOLON
 			   end
+			 else if t = COMMA then
+			   begin
+			     let nt = token lb in
+				 next := Some nt;
+				 if nt = RPAR then COMMEND
+				 else COMMA
+			   end
 			 else t
 		   end
 	  | Some t ->
@@ -134,6 +149,13 @@ and	comment = parse
 			 next := Some nt;
 			 if nt = END then SMCEND
  			 else SMCOLON
+		   end
+		 else if t = COMMA then
+		   begin
+		     let nt = token lb in
+			 next := Some nt;
+			 if nt = RPAR then COMMEND
+			 else COMMA
 		   end
 		 else t
 

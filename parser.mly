@@ -30,7 +30,8 @@
 	let get_ident = function
 	  | Eident id -> id
 	  | _ as exp -> failwith ("expected an identifier, but got " ^ (string_of_expr exp))
-				  
+
+					  
 %}
 
 /* %token TYPE RETTYPE */
@@ -42,7 +43,7 @@
 %token INCR DECR SET ASSIGN
 %token IMPORT PACKAGE STRUCT
 %token FUNC VAR TYPE RETURN
-%token FOR IF ELSE PRINT
+%token FOR IF ELSE
 %token SMCOLON SMCEND COMMA COMMEND
 %token BEGIN END LPAR RPAR EOF
 
@@ -96,7 +97,7 @@ retty:
 ;
 
 block:
-  | BEGIN END
+  | BEGIN /* SMCOLON* */ SMCEND? END 
 	{ [] }
   | BEGIN stmts = separated_nonempty_list(SMCOLON, stmt) SMCEND? END
 	{ stmts }
@@ -137,13 +138,13 @@ instr:
 	{ Iincr e }
   | e = expr DECR
 	{ Idecr e }
-  | es = separated_nonempty_list(COMMA, expr) SET vs = separated_nonempty_list(COMMA, expr)
-	{ Iset (es, vs)  }
+  | exps = separated_nonempty_list(COMMA, expr) SET values = separated_nonempty_list(COMMA, expr)
+	{ Iset (exps, values)  }
   | vars = separated_nonempty_list(COMMA, expr) ASSIGN values = separated_nonempty_list(COMMA, expr)
 	{ Iassign (List.map (get_ident) vars, values) }
 ;
 
-expr:
+expr: /* Constrain integers to fit in 64b archi */
   | c = CST
 	{ Ecst c }
   | LPAR e = expr RPAR
@@ -152,10 +153,13 @@ expr:
 	{ Eident v }
   | s = expr DOT f = IDENT
 	{ Eaccess (s, f) }
-  | f = IDENT LPAR actuals = separated_list(COMMA, expr) RPAR
+  | f = IDENT actuals = delimited(LPAR, separated_list(COMMA, expr), RPAR)
 	{ Ecall (f, actuals) }
-  | PRINT LPAR es = separated_list(COMMA, expr) RPAR
-	{ Eprint es }
+  | fmt = expr DOT print = IDENT exps = delimited(LPAR, separated_list(COMMA, expr), RPAR)
+	{ match fmt, print with
+	  | Eident "fmt", "Print" -> Eprint exps
+	  | _, _ -> failwith ("expected fmt.Print, but got " ^ (string_of_expr fmt) ^
+							"." ^ print) }
   | NOT e = expr
 	{ Eunop (Unot, e) }
   | MINUS e = expr %prec unary_minus
