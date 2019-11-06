@@ -13,7 +13,7 @@
 	  | Bge -> ">=" | Band -> "&&" | Bor -> "||"
 										  
 	let string_of_constant = function
-	  | Cint n -> Int64.to_string n
+	  | Cint n -> Big_int.string_of_big_int n
 	  | Cstring str -> str
 	  | Cbool b -> if b then "true" else "false"
 	  | Cnil -> "nil"
@@ -31,6 +31,71 @@
 	  | Eident id -> id
 	  | _ as exp -> failwith ("expected an identifier, but got " ^ (string_of_expr exp))
 
+	let check_opt check = function
+	  | None -> None
+	  | Some e -> Some (check e)
+
+	let level = ref 0
+	let max_int = Big_int.power_int_positive_int 2 63
+	let overflow n =
+	  Big_int.ge_big_int n max_int
+
+	let underflow =
+	  let min_int = Big_int.minus_big_int max_int in
+	  fun n -> Big_int.lt_big_int n min_int 
+
+	let rec check_stmt = function
+	  | Sexec instr -> Sexec (check_shstmt instr)
+	  | Sblock b -> Sblock (check_block b)
+	  | Sif (cond, body, othw) ->
+		 Sif (check_expr cond, List.map (check_stmt) body, check_else othw)
+	  | Sinit (vars, ty, vals) -> Sinit (vars, ty, List.map (check_expr) vals)
+	  | Sreturn vals -> Sreturn (List.map (check_expr) vals)
+	  | Sfor (init, cond, post, body) ->
+		 Sfor (check_opt check_shstmt init, check_expr cond, check_opt check_shstmt post, check_block body)
+	and check_block b = List.map (check_stmt) b
+	and check_shstmt = function
+	  | Ieval exp -> Ieval (check_expr exp)
+	  | Iincr exp -> Iincr (check_expr exp)
+	  | Idecr exp -> Idecr (check_expr exp)
+	  | Iset (fields, vals) ->
+		 Iset (List.map (check_expr) fields, List.map (check_expr) vals)
+	  | Iassign (vars, vals) ->
+		 Iassign (vars, List.map (check_expr) vals)
+	and check_expr = function
+	  | Ecst (Cint n) -> Ecst (Cint (check_int n))
+	  | Ecst _ as e -> e
+	  | Eident _ as e -> e
+	  | Eaccess (struct_, field) -> Eaccess (check_expr struct_, field)
+	  | Ecall (f, actuals) -> Ecall (f, List.map (check_expr) actuals)
+	  | Eprint vals -> Eprint (List.map (check_expr) vals)
+	  | Eunop (op, exp) ->
+		 begin
+		   match op with
+		   | Uneg ->
+			  begin
+				incr level;
+				let exp = check_expr exp in
+				decr level;
+				match exp with
+				| Ecst (Cint n) -> Ecst (Cint (check_int n))
+			  | _ -> Eunop (Uneg, exp)
+			  end
+		   | _ -> Eunop (op, check_expr exp)
+		 end
+	  | Ebinop (op, l, r) -> Ebinop (op, check_expr l, check_expr r)
+	and check_int n =
+	  if !level = 0 && (overflow n || underflow n)
+	  then failwith (Format.sprintf "%s does not fit in 64 bits@." (Big_int.string_of_big_int n));
+	  if !level mod 2 = 1 then Big_int.minus_big_int n
+	  else n 
+	and check_else = function
+	  | ELblock b -> ELblock (check_block b)
+	  | ELif (cond, body, othw) ->
+		 ELif (check_expr cond, List.map (check_stmt) body, check_else othw)
+
+	let struct_name = None
+	let field_name = None
 					  
 %}
 
@@ -72,9 +137,9 @@ decl:
   | TYPE s = IDENT STRUCT BEGIN fields = separated_nonempty_list(SMCOLON, vars) SMCEND? END SMCOLON
 	{ Dstruct (s, fields) }
   | FUNC f = IDENT LPAR RPAR retty = retty? block = block SMCOLON
-	{ Dfun (f, [], retty, block) }
+	{ Dfunc (f, [], retty, check_block block) }
   | FUNC f = IDENT LPAR params = separated_nonempty_list(COMMA, vars) COMMEND? RPAR retty = retty? block = block SMCOLON
-	{ Dfun (f, params, retty, block) }
+	{ Dfunc (f, params, retty, check_block block) }
 ;
 
 vars:
@@ -102,7 +167,7 @@ block:
 ;
 
 stmt:
-  | i = instr
+  | i = shstmt
 	{ Sexec i }
   | b = block
 	{ Sblock b }
@@ -118,7 +183,7 @@ stmt:
 	{ Sfor (None, Ecst (Cbool true), None, body) }
   | FOR cond = expr body = block
 	{ Sfor (None, cond, None, body) }
-  | FOR init = instr? SMCOLON cond = expr SMCOLON post = instr? body= block
+  | FOR init = shstmt? SMCOLON cond = expr SMCOLON post = shstmt? body= block
 	{ Sfor (init, cond, post, body) }
 
 stif:
@@ -129,7 +194,7 @@ stif:
   | IF e = expr b = block ELSE el = stif
 	{ e, b, ELif el }
 
-instr:
+shstmt:
   | e = expr
 	{ Ieval e }
   | e = expr INCR
@@ -142,7 +207,7 @@ instr:
 	{ Iassign (List.map (get_ident) vars, values) }
 ;
 
-expr: /* Constrain integers to fit in 64b archi */
+expr:
   | c = CST
 	{ Ecst c }
   | LPAR e = expr RPAR
@@ -153,11 +218,8 @@ expr: /* Constrain integers to fit in 64b archi */
 	{ Eaccess (s, f) }
   | f = IDENT actuals = delimited(LPAR, separated_list(COMMA, expr), RPAR)
 	{ Ecall (f, actuals) }
-  | fmt = expr DOT print = IDENT exps = delimited(LPAR, separated_list(COMMA, expr), RPAR)
-	{ match fmt, print with
-	  | Eident "fmt", "Print" -> Eprint exps
-	  | _, _ -> failwith ("expected fmt.Print, but got " ^ (string_of_expr fmt) ^
-							"." ^ print) }
+  | fmt = expr DOT print = IDENT values = delimited(LPAR, separated_list(COMMA, expr), RPAR)
+	{ Eprint values }
   | NOT e = expr
 	{ Eunop (Unot, e) }
   | MINUS e = expr %prec unary_minus

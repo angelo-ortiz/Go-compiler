@@ -12,7 +12,7 @@ all: $(BIN)
 test_syntax: $(BIN)
 
 $(BIN): $(CMO)
-	ocamlc $(FLAGS) -o $(BIN) $(CMO) #zarith.cma
+	ocamlc $(FLAGS) -o $(BIN) nums.cma $(CMO) #zarith.cma
 
 .SUFFIXES: .mli .ml .cmi .cmo .mll .mly
 

@@ -37,8 +37,7 @@ rule token = parse
   | space+					{ token lexbuf }
   | "import" 				{ import lexbuf }
   | "package" 				{ package lexbuf }
-  | integer as n			{ try CST (Cint (Int64.of_string n)) with Failure _ ->
-  			   				  raise (Lexing_error (Format.sprintf "%s does not fit in 64b@." n)) }
+  | integer as n			{ CST (Cint (Big_int.big_int_of_string n)) }
   | '"'						{ CST (Cstring (string lexbuf)) }
   | "/*"	  	  	 		{ comment lexbuf }
   | ":="					{ ASSIGN }

@@ -21,7 +21,7 @@ type binop =
   | Band | Bor                          (* && || *)
 
 type constant =
-  | Cint of int64
+  | Cint of Big_int.big_int
   | Cstring of string
   | Cbool of bool
   | Cnil
@@ -35,7 +35,7 @@ type expr =
   | Eunop of unop * expr
   | Ebinop of binop * expr * expr
 
-and instr =
+and shstmt =
   | Ieval of expr
   | Iincr of expr
   | Idecr of expr
@@ -45,12 +45,12 @@ and instr =
 and block = stmt list
           
 and stmt =
-  | Sexec of instr
+  | Sexec of shstmt
   | Sblock of block
   | Sif of stif
   | Sinit of ident list * ty option * expr list
   | Sreturn of expr list
-  | Sfor of instr option * expr * instr option * block
+  | Sfor of shstmt option * expr * shstmt option * block
 
 and stelse =
   | ELblock of block
@@ -62,7 +62,7 @@ and vars = ident list * ty
          
 and decl =
   | Dstruct of ident * vars list
-  | Dfun of ident * vars list * retty option * block
+  | Dfunc of ident * vars list * retty option * block
 
 type file = {
     imp : bool;
