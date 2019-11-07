@@ -69,7 +69,7 @@ rule token = parse
   | ident as str			{ id_or_kwd str }
   | "//" [^'\n']* eof
   | eof 	  	  	 		{ EOF }
-  | _ as c	  	  	 		{ raise (Lexing_error (Format.sprintf "unexpected %c@." c)) }
+  | _ as c	  	  	 		{ raise (Lexing_error (Format.sprintf "unexpected character %c" c)) }
 
 and string = parse
   | '"'   					{ let str = Buffer.contents str_buf in
@@ -79,14 +79,14 @@ and string = parse
   | "\\n"					{ Buffer.add_char str_buf '\n'; string lexbuf }
   | "\\t"					{ Buffer.add_char str_buf '\t'; string lexbuf }
   | _ as c					{ Buffer.add_char str_buf c; string lexbuf }
-  | eof	 					{ raise (Lexing_error (Format.sprintf "eof while scanning string@.")) }
+  | eof	 					{ raise (Lexing_error (Format.sprintf "encountered eof while scanning for a string")) }
 
 and import = parse
   | '\n'					{ new_line lexbuf; import lexbuf }
   | space+					{ import lexbuf }
   | "\"fmt\""				{ IMPORT }
   | _						{ raise (Lexing_error "unknown package") }
-  | eof						{ raise (Lexing_error "expected a name of package to be imported") }
+  | eof						{ raise (Lexing_error "expected a name of package to be imported, but encountered eof") }
 
 and package = parse
   | '\n'					{ new_line lexbuf; package lexbuf }
@@ -99,7 +99,7 @@ and	comment = parse
   | "*/"					{ token lexbuf }
   | '\n'					{ new_line lexbuf; update_smcolon (); comment lexbuf }
   | _						{ comment lexbuf }
-  | eof						{ raise (Lexing_error "comment not terminated") }
+  | eof						{ raise (Lexing_error (Format.sprintf "comment not terminated")) }
 
 {
 

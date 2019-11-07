@@ -20,8 +20,8 @@
 			  
 	let rec string_of_expr = function
 	  | Ecst cst -> string_of_constant cst
-	  | Eident id -> "variable " ^ id
-	  | Eaccess (exp, field) -> (string_of_expr exp) ^ ".(" ^ field ^ ")"
+	  | Eident id -> id
+	  | Eaccess (exp, field) -> (string_of_expr exp) ^ "." ^ field
 	  | Ecall (f, args) -> f ^ "(...)"
 	  | Eprint _ -> "fmt.Print(...)"
 	  | Eunop (op, expr) -> (string_of_unop op) ^ (string_of_expr expr)
@@ -29,7 +29,11 @@
 						   
 	let get_ident = function
 	  | Eident id -> id
-	  | _ as exp -> failwith ("expected an identifier, but got " ^ (string_of_expr exp))
+	  | _ as exp -> failwith ("expected an identifier, but got " ^ (string_of_expr exp) ^ " on the LHS of :=")
+
+	let check_package = function
+	  | Eident id when id = "fmt" -> ()
+	  | _ -> failwith "expected primitive Print from package `fmt`"
 
 	let check_opt check = function
 	  | None -> None
@@ -86,7 +90,7 @@
 	  | Ebinop (op, l, r) -> Ebinop (op, check_expr l, check_expr r)
 	and check_int n =
 	  if !level = 0 && (overflow n || underflow n)
-	  then failwith (Format.sprintf "%s does not fit in 64 bits@." (Big_int.string_of_big_int n));
+	  then failwith (Format.sprintf "%s does not fit in 64 bits" (Big_int.string_of_big_int n));
 	  if !level mod 2 = 1 then Big_int.minus_big_int n
 	  else n 
 	and check_else = function
@@ -99,7 +103,6 @@
 					  
 %}
 
-/* %token TYPE RETTYPE */
 %token <Ast.binop> CMP
 %token <Ast.constant> CST
 %token <string> IDENT
@@ -132,13 +135,9 @@ file:
 ;
 
 decl:
-  | TYPE s = IDENT STRUCT BEGIN END SMCOLON
-	{ Dstruct (s, []) }
-  | TYPE s = IDENT STRUCT BEGIN fields = separated_nonempty_list(SMCOLON, vars) SMCEND? END SMCOLON
+  | TYPE s = IDENT STRUCT BEGIN fields = loption(terminated(separated_nonempty_list(SMCOLON, vars), SMCEND?)) END SMCOLON
 	{ Dstruct (s, fields) }
-  | FUNC f = IDENT LPAR RPAR retty = retty? block = block SMCOLON
-	{ Dfunc (f, [], retty, check_block block) }
-  | FUNC f = IDENT LPAR params = separated_nonempty_list(COMMA, vars) COMMEND? RPAR retty = retty? block = block SMCOLON
+  | FUNC f = IDENT LPAR params = loption(terminated(separated_nonempty_list(COMMA, vars), COMMEND?)) RPAR retty = retty? block = block SMCOLON
 	{ Dfunc (f, params, retty, check_block block) }
 ;
 
@@ -194,6 +193,10 @@ stif:
   | IF e = expr b = block ELSE el = stif
 	{ e, b, ELif el }
 
+assign:
+  vars = separated_nonempty_list(COMMA, expr) ASSIGN
+	{ List.map (get_ident) vars }
+
 shstmt:
   | e = expr
 	{ Ieval e }
@@ -203,9 +206,13 @@ shstmt:
 	{ Idecr e }
   | exps = separated_nonempty_list(COMMA, expr) SET values = separated_nonempty_list(COMMA, expr)
 	{ Iset (exps, values)  }
-  | vars = separated_nonempty_list(COMMA, expr) ASSIGN values = separated_nonempty_list(COMMA, expr)
-	{ Iassign (List.map (get_ident) vars, values) }
+  | vars = assign values = separated_nonempty_list(COMMA, expr)
+	{ Iassign (vars, values) }
 ;
+
+print:
+  fmt = expr DOT print = IDENT LPAR
+	{ check_package fmt }
 
 expr:
   | c = CST
@@ -218,7 +225,7 @@ expr:
 	{ Eaccess (s, f) }
   | f = IDENT actuals = delimited(LPAR, separated_list(COMMA, expr), RPAR)
 	{ Ecall (f, actuals) }
-  | fmt = expr DOT print = IDENT values = delimited(LPAR, separated_list(COMMA, expr), RPAR)
+  | print values = separated_list(COMMA, expr) RPAR
 	{ Eprint values }
   | NOT e = expr
 	{ Eunop (Unot, e) }
