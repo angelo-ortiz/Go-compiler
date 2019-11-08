@@ -4,7 +4,7 @@ TODO
   * Check *next_token* function
 1. Parser
   * Check syntax error messages
-  * Check lexeme pos, notably for the print primitive
+  * Check lexeme pos, notably for the dangling commas/semicolons
 1. Semantic analyser
 1. Assembly-code producer
 
@@ -23,3 +23,4 @@ Fixed issues
 1. Dangling semicolons in block
 1. Conflict between setting expressions (=) and sugar syntax for initialising variables (:=)
 1. Parsing of all integers in [-2^63;2^63-1] is now successful
+1. Precise location for errors concerning the LHS of :=

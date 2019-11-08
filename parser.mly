@@ -2,38 +2,26 @@
  /* Go parser */
 
 %{
-	open Ast
+	open Format
 	   
-	let string_of_unop = function
-	  | Unot -> "!" | Uneg -> "-" | Udref -> "*" | Uaddr -> "&"
-														  
-	let string_of_binop = function
-	  | Badd -> "+" | Bsub -> "-"  | Bmul -> "*" | Bdiv -> "/" | Bmod -> "%"
-	  | Beq -> "==" | Bneq -> "!=" | Blt -> "<" | Ble -> "<=" | Bgt -> ">"
-	  | Bge -> ">=" | Band -> "&&" | Bor -> "||"
-										  
-	let string_of_constant = function
-	  | Cint n -> Big_int.string_of_big_int n
-	  | Cstring str -> str
-	  | Cbool b -> if b then "true" else "false"
-	  | Cnil -> "nil"
-			  
-	let rec string_of_expr = function
-	  | Ecst cst -> string_of_constant cst
+	open Ast
+	open Utils
+	   
+	let get_ident pos = function
 	  | Eident id -> id
-	  | Eaccess (exp, field) -> (string_of_expr exp) ^ "." ^ field
-	  | Ecall (f, args) -> f ^ "(...)"
-	  | Eprint _ -> "fmt.Print(...)"
-	  | Eunop (op, expr) -> (string_of_unop op) ^ (string_of_expr expr)
-	  | Ebinop (op, l, r) -> (string_of_expr l) ^ (string_of_binop op) ^ (string_of_expr r)
-						   
-	let get_ident = function
-	  | Eident id -> id
-	  | _ as exp -> failwith ("expected an identifier, but got " ^ (string_of_expr exp) ^ " on the LHS of :=")
+	  | _ as exp ->
+		 raise (Utils.Syntax_error
+				  (Format.asprintf "unexpected expression %s%s%a%s%s, expecting string"
+								   Utils.invert Utils.yellow Utils.string_of_expr exp Utils.close Utils.close, pos))
 
-	let check_package = function
-	  | Eident id when id = "fmt" -> ()
-	  | _ -> failwith "expected primitive Print from package `fmt`"
+	let check_package fmt pos_fmt print pos_print =
+	  match fmt with
+	  | Eident id when id = "fmt" ->
+		 if print <> "Print"
+		 then raise (Utils.Syntax_error
+					   (Format.sprintf "unexpected primitive %s%s%s%s%s, expecting Print"
+									   Utils.invert Utils.yellow print Utils.close Utils.close, pos_print))
+	  | _ -> raise (Utils.Syntax_error ("expected package fmt", pos_fmt))
 
 	let check_opt check = function
 	  | None -> None
@@ -90,7 +78,10 @@
 	  | Ebinop (op, l, r) -> Ebinop (op, check_expr l, check_expr r)
 	and check_int n =
 	  if !level = 0 && (overflow n || underflow n)
-	  then failwith (Format.sprintf "%s does not fit in 64 bits" (Big_int.string_of_big_int n));
+	  then raise (Utils.Syntax_error
+					(Format.sprintf "%s%s%s%s%s does not fit in 64 bits"
+									Utils.invert Utils.yellow (Big_int.string_of_big_int n) Utils.close Utils.close,
+					 (Lexing.dummy_pos, Lexing.dummy_pos)));
 	  if !level mod 2 = 1 then Big_int.minus_big_int n
 	  else n 
 	and check_else = function
@@ -100,6 +91,7 @@
 
 	let struct_name = None
 	let field_name = None
+	let positions = ref []
 					  
 %}
 
@@ -174,7 +166,7 @@ stmt:
 	{ Sif i }
   | VAR vars = separated_nonempty_list(COMMA, IDENT) ty = ty?
 	{ Sinit (vars, ty, []) }
-  | VAR vars = separated_nonempty_list(COMMA, IDENT) ty = ty? SET values = separated_nonempty_list(COMMA, expr)
+  | VAR vars = separated_nonempty_list(COMMA, IDENT) ty = ty? SET values = expr_list
 	{ Sinit (vars, ty, values) }
   | RETURN vs = separated_list(COMMA, expr)
 	{ Sreturn vs }
@@ -193,9 +185,17 @@ stif:
   | IF e = expr b = block ELSE el = stif
 	{ e, b, ELif el }
 
+rev_expr_list:
+  | e = expr { positions := [$loc(e)]; [e] }
+  | exps = expr_list COMMA e = expr
+	{ positions := $loc(e) :: !positions; e :: exps }
+
+expr_list:
+  exps = rev_expr_list { List.rev exps }
+
 assign:
-  vars = separated_nonempty_list(COMMA, expr) ASSIGN
-	{ List.map (get_ident) vars }
+  vars = expr_list ASSIGN
+	{ List.map2 (get_ident) !positions (List.rev vars) }
 
 shstmt:
   | e = expr
@@ -204,15 +204,15 @@ shstmt:
 	{ Iincr e }
   | e = expr DECR
 	{ Idecr e }
-  | exps = separated_nonempty_list(COMMA, expr) SET values = separated_nonempty_list(COMMA, expr)
+  | exps = expr_list SET values = expr_list
 	{ Iset (exps, values)  }
-  | vars = assign values = separated_nonempty_list(COMMA, expr)
+  | vars = assign values = expr_list
 	{ Iassign (vars, values) }
 ;
 
 print:
   fmt = expr DOT print = IDENT LPAR
-	{ check_package fmt }
+	{ check_package fmt $loc(fmt) print $loc(print) }
 
 expr:
   | c = CST

@@ -1,6 +1,7 @@
 {
   open Lexing
   open Parser
+  open Utils
 
   exception Lexing_error of string
 
@@ -69,7 +70,7 @@ rule token = parse
   | ident as str			{ id_or_kwd str }
   | "//" [^'\n']* eof
   | eof 	  	  	 		{ EOF }
-  | _ as c	  	  	 		{ raise (Lexing_error (Format.sprintf "unexpected character %c" c)) }
+  | _ as c	  	  	 		{ raise (Lexing_error (Format.sprintf "unexpected character %s%s%c%s%s" Utils.invert Utils.yellow c Utils.close Utils.close)) }
 
 and string = parse
   | '"'   					{ let str = Buffer.contents str_buf in
@@ -79,27 +80,35 @@ and string = parse
   | "\\n"					{ Buffer.add_char str_buf '\n'; string lexbuf }
   | "\\t"					{ Buffer.add_char str_buf '\t'; string lexbuf }
   | _ as c					{ Buffer.add_char str_buf c; string lexbuf }
-  | eof	 					{ raise (Lexing_error (Format.sprintf "encountered eof while scanning for a string")) }
+  | eof	 					{ raise (Lexing_error (Format.sprintf
+  							  "encountered eof while scanning for a string")) }
 
 and import = parse
   | '\n'					{ new_line lexbuf; import lexbuf }
   | space+					{ import lexbuf }
   | "\"fmt\""				{ IMPORT }
   | _						{ raise (Lexing_error "unknown package") }
-  | eof						{ raise (Lexing_error "expected a name of package to be imported, but encountered eof") }
+  | eof						{ raise (Lexing_error (Format.sprintf
+  							  "unexpected %s%seof%s%s, expecting a package name"
+							  Utils.invert Utils.yellow Utils.close Utils.close)) }
 
 and package = parse
   | '\n'					{ new_line lexbuf; package lexbuf }
   | space+					{ package lexbuf }
   | "main"					{ PACKAGE }
-  | _						{ raise (Lexing_error "package name must be `main`") }
-  | eof						{ raise (Lexing_error "expected a package name") }
+  | _						{ raise (Lexing_error (Format.sprintf
+  							  "package name must be %s%smain%s%s"
+							  Utils.invert Utils.yellow Utils.close Utils.close)) }
+  | eof						{ raise (Lexing_error (Format.sprintf
+  							  "unexpected %s%seof%s%s, expecting a package name"
+							  Utils.invert Utils.yellow Utils.close Utils.close)) }
 
 and	comment = parse
   | "*/"					{ token lexbuf }
   | '\n'					{ new_line lexbuf; update_smcolon (); comment lexbuf }
   | _						{ comment lexbuf }
-  | eof						{ raise (Lexing_error (Format.sprintf "comment not terminated")) }
+  | eof						{ raise (Lexing_error
+  							  (Format.sprintf "comment not terminated")) }
 
 {
 
@@ -114,48 +123,32 @@ and	comment = parse
 	  match !next with
 	  | None ->
 	  	 let t = token lb in
-		 if !smcolon_state = Some true then
-		   begin
-		     next := Some t;
-			 if t = END then SMCEND
-			 else SMCOLON
-		   end
-		 else 
-		   begin
-			 add_semicolon t;
-			 if t = SMCOLON then
-			   begin
-			     let nt = token lb in
-				 next := Some nt;
-				 if nt = END then SMCEND
-				 else SMCOLON
-			   end
-			 else if t = COMMA then
-			   begin
-			     let nt = token lb in
-				 next := Some nt;
-				 if nt = RPAR then COMMEND
-				 else COMMA
-			   end
-			 else t
-		   end
+		 if !smcolon_state = Some true then begin
+		   next := Some t;
+		   if t = END then SMCEND else SMCOLON
+		 end else begin
+		   add_semicolon t;
+		   if t = SMCOLON then begin
+		     let nt = token lb in
+			 next := Some nt;
+			 if nt = END then SMCEND else SMCOLON
+		   end else if t = COMMA then begin
+		     let nt = token lb in
+		     next := Some nt;
+		     if nt = RPAR then COMMEND else COMMA
+		   end else t
+		 end
 	  | Some t ->
 	  	 add_semicolon t;
 		 next := None;
-		 if t = SMCOLON then
-		   begin
-		     let nt = token lb in
-			 next := Some nt;
-			 if nt = END then SMCEND
- 			 else SMCOLON
-		   end
-		 else if t = COMMA then
-		   begin
-		     let nt = token lb in
-			 next := Some nt;
-			 if nt = RPAR then COMMEND
-			 else COMMA
-		   end
-		 else t
+		 if t = SMCOLON then begin
+		   let nt = token lb in
+		   next := Some nt;
+		   if nt = END then SMCEND else SMCOLON
+		 end else if t = COMMA then begin
+		   let nt = token lb in
+		   next := Some nt;
+		   if nt = RPAR then COMMEND else COMMA
+		 end else t
 
 }

@@ -3,6 +3,7 @@
 
 open Lexing
 open Parser
+open Utils
 
 let usage = "usage: pgoc [options] file.go"
 
@@ -27,7 +28,7 @@ let file =
 let report (b, e) =
   let line = b.pos_lnum in
   let fchar = b.pos_cnum - b.pos_bol + 1 in
-  let lchar = e.pos_cnum - e.pos_bol +1 in
+  let lchar = e.pos_cnum - e.pos_bol in
   Format.eprintf "File \"%s\", line %d, characters %d-%d:\n" file line fchar lchar
 
 let () =
@@ -42,17 +43,18 @@ let () =
   with
   | Lexer.Lexing_error s ->
      report (lexeme_start_p lb, lexeme_end_p lb);
-     Format.eprintf "lexical error: \027[91m%s\027[0m@." s;
+     Format.eprintf "%slexical error%s: %s@." Utils.red Utils.close s;
      exit 1
   | Parser.Error ->
      report (lexeme_start_p lb, lexeme_end_p lb);
-     Format.eprintf "syntax error: \027[91m%s\027[0m@." (lexeme lb);
+     Format.eprintf "%ssyntax error%s: unexpected token %s%s%s%s%s@." Utils.red
+       Utils.close Utils.invert Utils.yellow (lexeme lb) Utils.close Utils.close;
      exit 1
-  | Failure msg ->
-     report (lexeme_start_p lb, lexeme_end_p lb);
-     Format.eprintf "syntax error: \027[91m%s\027[0m@." msg;
+  | Utils.Syntax_error (msg, loc) ->
+     report loc;
+     Format.eprintf "%ssyntax error%s: %s@." Utils.red Utils.close msg;
      exit 1
-  (* typing here *)
   | e ->
-     Format.eprintf "unrecognised error: \027[91m%s\027[0m@." (Printexc.to_string e);
+     Format.eprintf "%sunrecognised error%s: %s%s%s@."
+       Utils.red Utils.close Utils.blue (Printexc.to_string e) Utils.close;
      exit 2
