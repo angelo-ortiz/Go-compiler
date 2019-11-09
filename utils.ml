@@ -149,8 +149,6 @@ and check_int n =
       n
     end
   
-  
-  
 and check_else = function
   | ELblock b ->
      ELblock (check_block b)

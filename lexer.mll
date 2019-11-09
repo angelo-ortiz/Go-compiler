@@ -21,7 +21,6 @@
 
   let update_smcolon () =
     if !smcolon_state = Some false then smcolon_state := Some true
-
 }
 
 let decimal = ['0'-'9']
@@ -70,7 +69,9 @@ rule token = parse
   | ident as str			{ id_or_kwd str }
   | "//" [^'\n']* eof
   | eof 	  	  	 		{ EOF }
-  | _ as c	  	  	 		{ raise (Lexing_error (Format.sprintf "unexpected character %s%s%c%s%s" Utils.invert Utils.yellow c Utils.close Utils.close)) }
+  | _ as c	  	  	 		{ raise (Lexing_error (Format.sprintf
+  	  	 					  "unexpected character %s%s%c%s%s" Utils.invert
+							   Utils.yellow c Utils.close Utils.close)) }
 
 and string = parse
   | '"'   					{ let str = Buffer.contents str_buf in

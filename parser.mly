@@ -8,7 +8,6 @@
 	open Utils
 	   
 	let expr_pos = ref []
-					  
 %}
 
 %token <Ast.binop> CMP
