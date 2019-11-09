@@ -45,6 +45,7 @@ and shstmt =
 and block = stmt list
           
 and stmt =
+  | Snop
   | Sexec of shstmt
   | Sblock of block
   | Sif of stif

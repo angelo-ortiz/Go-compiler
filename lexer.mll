@@ -38,7 +38,7 @@ rule token = parse
   | space+					{ token lexbuf }
   | "import" 				{ import lexbuf }
   | "package" 				{ package lexbuf }
-  | integer as n			{ CST (Cint (Big_int.big_int_of_string n)) }
+  | integer as n			{ INT n }
   | '"'						{ CST (Cstring (string lexbuf)) }
   | "/*"	  	  	 		{ comment lexbuf }
   | ":="					{ ASSIGN }
@@ -114,7 +114,7 @@ and	comment = parse
 
   let next_token =
     let add_semicolon = function
-	  | IDENT _ | CST _ | RETURN | INCR | DECR | RPAR | END | PACKAGE ->
+	  | IDENT _ | CST _ | INT _ | RETURN | INCR | DECR | RPAR | END | PACKAGE ->
 	  	 smcolon_state := Some false
 	  | _ -> smcolon_state := None
 	in
@@ -125,30 +125,14 @@ and	comment = parse
 	  	 let t = token lb in
 		 if !smcolon_state = Some true then begin
 		   next := Some t;
-		   if t = END then SMCEND else SMCOLON
+		   SMCOLON
 		 end else begin
 		   add_semicolon t;
-		   if t = SMCOLON then begin
-		     let nt = token lb in
-			 next := Some nt;
-			 if nt = END then SMCEND else SMCOLON
-		   end else if t = COMMA then begin
-		     let nt = token lb in
-		     next := Some nt;
-		     if nt = RPAR then COMMEND else COMMA
-		   end else t
+		   t
 		 end
 	  | Some t ->
 	  	 add_semicolon t;
 		 next := None;
-		 if t = SMCOLON then begin
-		   let nt = token lb in
-		   next := Some nt;
-		   if nt = END then SMCEND else SMCOLON
-		 end else if t = COMMA then begin
-		   let nt = token lb in
-		   next := Some nt;
-		   if nt = RPAR then COMMEND else COMMA
-		 end else t
+		 t
 
 }

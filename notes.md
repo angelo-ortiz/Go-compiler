@@ -4,7 +4,7 @@ TODO
   * Check *next_token* function
 1. Parser
   * Check syntax error messages
-  * Check lexeme pos, notably for the dangling commas/semicolons
+  * How to get the pos° of the first '-' when dealing with integers (for error printing purposes)?
 1. Semantic analyser
 1. Assembly-code producer
 
@@ -18,8 +18,8 @@ Remarks
 
 Fixed issues
 ------------
-1. Before-parenthesis comma
-1. Before-brace semicolon
+1. ~~Before-parenthesis comma~~ No longer an issue, since dealing manually in parser
+1. ~~Before-brace semicolon~~ Idem
 1. Dangling semicolons in block
 1. Conflict between setting expressions (=) and sugar syntax for initialising variables (:=)
 1. Parsing of all integers in [-2^63;2^63-1] is now successful
