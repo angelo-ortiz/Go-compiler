@@ -1,5 +1,5 @@
 
-exception Syntax_error of string * (Lexing.position * Lexing.position)
+exception Syntax_error of (Lexing.position * Lexing.position) * string
 
 val red : string
 val yellow : string

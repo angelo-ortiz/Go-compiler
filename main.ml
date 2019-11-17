@@ -50,7 +50,7 @@ let () =
      Format.eprintf "%ssyntax error%s: %s@." Utils.red
        Utils.close (Utils.format_mid_string "unexpected token " (lexeme lb) "");
      exit 1
-  | Utils.Syntax_error (msg, loc) ->
+  | Utils.Syntax_error (loc, msg) ->
      report loc;
      Format.eprintf "%ssyntax error%s: %s@." Utils.red Utils.close msg;
      exit 1

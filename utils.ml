@@ -4,7 +4,7 @@ open Format
 open Ast
 open Lexing
 
-exception Syntax_error of string * Ast.loc
+exception Syntax_error of Ast.loc * string
 
 let red = "\027[31m"
 let yellow = "\027[33m"
@@ -64,18 +64,18 @@ let get_ident e =
      id
   | _ as exp ->
 	 raise ( Syntax_error
-			   (Format.asprintf "unexpected expression %s%s%a%s%s, expecting string"
-				  invert yellow string_of_expr exp close close, e.loc) )
+			   (e.loc, Format.asprintf "unexpected expression %s%s%a%s%s, expecting string"
+				         invert yellow string_of_expr exp close close) )
     
 let check_package pkg func func_loc =
   match pkg.expr with
   | Eident id when id = "fmt" ->
 	 if func <> "Print" then
        raise ( Syntax_error
-                 (Format.sprintf "unexpected function %s%s%s%s%s, expecting Print"
-				    invert yellow func close close, func_loc) )
+                 (func_loc, Format.sprintf "unexpected function %s%s%s%s%s, expecting Print"
+				              invert yellow func close close) )
   | _ ->
-     raise (Syntax_error ("expected package fmt", pkg.loc))
+     raise (Syntax_error (pkg.loc, "expected package fmt"))
 
 let overflow n =
   Big_int.ge_big_int n max_int
@@ -87,8 +87,8 @@ let underflow =
 let check_int_size n loc =
   if !level =  0 && (overflow n || underflow n) then
     raise ( Syntax_error
-			  (Format.sprintf "%s%s%s%s%s does not fit in 64 bits"
-				 invert yellow (Big_int.string_of_big_int n) close close, loc) )
+			  (loc, Format.sprintf "%s%s%s%s%s does not fit in 64 bits"
+				      invert yellow (Big_int.string_of_big_int n) close close) )
   
 let check_int n_str loc =
   let n = Big_int.big_int_of_string n_str in
