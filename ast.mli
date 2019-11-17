@@ -1,6 +1,8 @@
 
 type ident = string
 
+type loc = Lexing.position * Lexing.position
+
 type ty =
   | Tbasic of ident
   | Tpointer of ty
@@ -29,18 +31,23 @@ type constant =
 type expr =
   | Ecst of constant
   | Eident of ident
-  | Eaccess of expr * ident
-  | Ecall of ident * expr list
-  | Eprint of expr list
-  | Eunop of unop * expr
-  | Ebinop of binop * expr * expr
+  | Eaccess of pexpr * ident
+  | Ecall of ident * pexpr list
+  | Eprint of pexpr list
+  | Eunop of unop * pexpr
+  | Ebinop of binop * pexpr * pexpr
 
+and pexpr = {
+    expr: expr;
+    loc: loc;
+  }
+          
 and shstmt =
-  | Ieval of expr
-  | Iincr of expr
-  | Idecr of expr
-  | Iset of expr list * expr list
-  | Iassign of ident list * expr list
+  | Ieval of pexpr
+  | Iincr of pexpr
+  | Idecr of pexpr
+  | Iset of pexpr list * pexpr list
+  | Iassign of ident list * pexpr list
              
 and block = stmt list
           
@@ -49,15 +56,15 @@ and stmt =
   | Sexec of shstmt
   | Sblock of block
   | Sif of stif
-  | Sinit of ident list * ty option * expr list
-  | Sreturn of expr list
-  | Sfor of shstmt option * expr * shstmt option * block
+  | Sinit of ident list * ty option * pexpr list
+  | Sreturn of pexpr list
+  | Sfor of shstmt option * pexpr * shstmt option * block
 
 and stelse =
   | ELblock of block
   | ELif of stif 
           
-and stif = expr * block * stelse
+and stif = pexpr * block * stelse
 
 and vars = ident list * ty
          
@@ -67,4 +74,5 @@ and decl =
 
 type file = {
     imp : bool;
-    decls : decl list; }
+    decls : decl list;
+  }

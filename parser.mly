@@ -2,12 +2,9 @@
  /* Go parser */
 
 %{
-	open Format
-	
 	open Ast
 	open Utils
-	   
-	let expr_pos = ref []
+	
 %}
 
 %token <Ast.binop> CMP
@@ -57,7 +54,7 @@ decl:
   | FUNC f = IDENT LPAR
     params = loption(terminated(tlist(COMMA, vars), COMMA?))
     RPAR retty = retty? block = block SMCOLON
-	{ Dfunc (f, List.rev params, retty, Utils.run_check block) }
+	{ Dfunc (f, List.rev params, retty, block) }
 ;
 
 vars:
@@ -85,7 +82,8 @@ block:
 ;
 
 stmt:
-  | { Snop }
+  | /* empty */
+	{ Snop }
   | i = shstmt
 	{ Sexec i }
   | b = block
@@ -100,7 +98,7 @@ stmt:
   | RETURN vs = separated_list(COMMA, expr)
 	{ Sreturn vs }
   | FOR body = block
-	{ Sfor (None, Ecst (Cbool true), None, body) }
+	{ Sfor (None, { expr = Ecst (Cbool true); loc = Lexing.dummy_pos, Lexing.dummy_pos }, None, body) }
   | FOR cond = expr body = block
 	{ Sfor (None, cond, None, body) }
   | FOR init = shstmt? SMCOLON cond = expr SMCOLON post = shstmt? body= block
@@ -117,9 +115,9 @@ stif:
 ;
 
 rev_expr_list:
-  | e = expr { expr_pos := [$loc(e)]; [e] }
+  | e = expr { [e] }
   | exps = rev_expr_list COMMA e = expr
-	{ expr_pos := $loc(e) :: !expr_pos; e :: exps }
+	{ e :: exps }
 ;
 
 expr_list:
@@ -128,7 +126,7 @@ expr_list:
 
 assign:
   vars = rev_expr_list ASSIGN
-	{ List.map2 (get_ident) !expr_pos vars }
+	{ List.map (Utils.get_ident) vars }
 ;
 
 shstmt:
@@ -146,34 +144,34 @@ shstmt:
 
 print:
   fmt = expr DOT print = IDENT LPAR
-	{ Utils.check_package fmt $loc(fmt) print $loc(print) }
+	{ Utils.check_package fmt print $loc(print) }
 ;
 
 expr:
   | c = CST
-	{ Ecst c }
+	{ { expr = Ecst c; loc = $loc(c) } }
   | n = INT
-	{ Utils.add_int_pos $loc(n); Ecst (Cint (Big_int.big_int_of_string n)) }
+	{ { expr = Ecst (Cint (Utils.check_int n $loc(n))); loc = $loc(n) } }
   | LPAR e = expr RPAR
 	{ e }
   | v = IDENT
-	{ Eident v }
+	{ { expr = Eident v; loc = $loc(v) } }
   | s = expr DOT f = IDENT
-	{ Eaccess (s, f) }
+	{ { expr = Eaccess (s, f); loc = $loc } }
   | f = IDENT actuals = delimited(LPAR, separated_list(COMMA, expr), RPAR)
-	{ Ecall (f, actuals) }
+	{ { expr = Ecall (f, actuals); loc = $loc } }
   | print values = separated_list(COMMA, expr) RPAR
-	{ Eprint values }
+	{ { expr = Eprint values; loc = $loc } }
   | NOT e = expr
-	{ Eunop (Unot, e) }
-  | MINUS e = expr %prec unary_minus
-	{ Eunop (Uneg, e) }
+	{ { expr = Eunop (Unot, e); loc = $loc } }
+  | midrule(MINUS { Utils.incr_level () }) e = expr %prec unary_minus
+	{ Utils.decr_level (); Utils.check_neg_int { expr = Eunop (Uneg, e); loc = $loc } }
   | STAR e = expr %prec unary_star
-	{ Eunop (Udref, e) }
+	{ { expr = Eunop (Udref, e); loc = $loc } }
   | ADDR e = expr
-	{ Eunop (Uaddr, e) }
+	{ { expr = Eunop (Uaddr, e); loc = $loc } }
   | l = expr op = binop r = expr
-	{ Ebinop (op, l, r) }
+	{ { expr = Ebinop (op, l, r); loc = $loc } }
 ;
 
 %inline binop:

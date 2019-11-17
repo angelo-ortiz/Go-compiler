@@ -1,4 +1,7 @@
 {
+
+  (* Go lexer *)
+ 
   open Lexing
   open Parser
   open Utils
@@ -69,9 +72,8 @@ rule token = parse
   | ident as str			{ id_or_kwd str }
   | "//" [^'\n']* eof
   | eof 	  	  	 		{ EOF }
-  | _ as c	  	  	 		{ raise (Lexing_error (Format.sprintf
-  	  	 					  "unexpected character %s%s%c%s%s" Utils.invert
-							   Utils.yellow c Utils.close Utils.close)) }
+  | _ as c	  	  	 		{ raise (Lexing_error (Utils.format_mid_string
+  	  	 					  		"unexpected character " (String.make 1 c) "")) }
 
 and string = parse
   | '"'   					{ let str = Buffer.contents str_buf in
@@ -81,35 +83,30 @@ and string = parse
   | "\\n"					{ Buffer.add_char str_buf '\n'; string lexbuf }
   | "\\t"					{ Buffer.add_char str_buf '\t'; string lexbuf }
   | _ as c					{ Buffer.add_char str_buf c; string lexbuf }
-  | eof	 					{ raise (Lexing_error (Format.sprintf
-  							  "encountered eof while scanning for a string")) }
+  | eof	 					{ raise (Lexing_error (Format.sprintf "string not terminated")) }
 
 and import = parse
   | '\n'					{ new_line lexbuf; import lexbuf }
   | space+					{ import lexbuf }
   | "\"fmt\""				{ IMPORT }
   | _						{ raise (Lexing_error "unknown package") }
-  | eof						{ raise (Lexing_error (Format.sprintf
-  							  "unexpected %s%seof%s%s, expecting a package name"
-							  Utils.invert Utils.yellow Utils.close Utils.close)) }
+  | eof						{ raise (Lexing_error (Utils.format_mid_string
+  							  					  "unexpected " "eof" ", expecting a package name")) }
 
 and package = parse
   | '\n'					{ new_line lexbuf; package lexbuf }
   | space+					{ package lexbuf }
   | "main"					{ PACKAGE }
-  | _						{ raise (Lexing_error (Format.sprintf
-  							  "package name must be %s%smain%s%s"
-							  Utils.invert Utils.yellow Utils.close Utils.close)) }
-  | eof						{ raise (Lexing_error (Format.sprintf
-  							  "unexpected %s%seof%s%s, expecting a package name"
-							  Utils.invert Utils.yellow Utils.close Utils.close)) }
+  | _						{ raise (Lexing_error (Utils.format_mid_string
+												  "package name must be " "main" "")) }
+  | eof						{ raise (Lexing_error (Utils.format_mid_string
+  							  					  "unexpected " "eof" ", expecting a package name")) }
 
 and	comment = parse
   | "*/"					{ token lexbuf }
   | '\n'					{ new_line lexbuf; update_smcolon (); comment lexbuf }
   | _						{ comment lexbuf }
-  | eof						{ raise (Lexing_error
-  							  (Format.sprintf "comment not terminated")) }
+  | eof						{ raise (Lexing_error (Format.sprintf "comment not terminated")) }
 
 {
 

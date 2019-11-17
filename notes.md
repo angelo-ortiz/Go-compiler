@@ -18,7 +18,7 @@ Remarks
 
 Fixed issues
 ------------
-1. ~~Before-parenthesis comma~~ No longer an issue, since dealing manually in parser
+1. ~~Before-parenthesis comma~~ No longer an issue, since dealt with manually in parser
 1. ~~Before-brace semicolon~~ Idem
 1. Dangling semicolons in block
 1. Conflict between setting expressions (=) and sugar syntax for initialising variables (:=)
