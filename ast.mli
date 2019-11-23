@@ -1,15 +1,13 @@
 
+(* Parsing grammar *)
+
 type ident = string
 
 type loc = Lexing.position * Lexing.position
 
-type ty =
+type typ =
   | Tbasic of ident
-  | Tpointer of ty
-
-and retty =
-  | RTsingle of ty
-  | RTtuple of ty list
+  | Tpointer of typ
 
 type unop =
   | Unot   (* not e *)
@@ -56,7 +54,7 @@ and stmt =
   | Sexec of shstmt
   | Sblock of block
   | Sif of stif
-  | Sinit of ident list * ty option * pexpr list
+  | Sinit of ident list * typ option * pexpr list
   | Sreturn of pexpr list
   | Sfor of shstmt option * pexpr * shstmt option * block
 
@@ -66,11 +64,11 @@ and stelse =
           
 and stif = pexpr * block * stelse
 
-and vars = ident list * ty
+and vars = ident list * typ
          
 and decl =
   | Dstruct of ident * vars list
-  | Dfunc of ident * vars list * retty option * block
+  | Dfunc of ident * vars list * typ list * block
 
 type file = {
     imp : bool;

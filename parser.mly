@@ -53,27 +53,27 @@ decl:
 	{ Dstruct (s, List.rev fields) }
   | FUNC f = IDENT LPAR
     params = loption(terminated(tlist(COMMA, vars), COMMA?))
-    RPAR retty = retty? block = block SMCOLON
-	{ Dfunc (f, List.rev params, retty, block) }
+    RPAR rtype = loption(rtype) block = block SMCOLON
+	{ Dfunc (f, List.rev params, rtype, block) }
 ;
 
 vars:
-  vars = separated_nonempty_list(COMMA, IDENT)  ty = ty
-	{ vars, ty }
+  vars = separated_nonempty_list(COMMA, IDENT)  typ = typ
+	{ vars, typ }
 ;
 
-ty:
-  | ty = IDENT
-	{ Tbasic ty }
-  | STAR ty = ty
-	{ Tpointer ty }
+typ:
+  | typ = IDENT
+	{ Tbasic typ }
+  | STAR typ = typ
+	{ Tpointer typ }
 ;
 
-retty:
-  | ty = ty
-	{ RTsingle ty }
-  | LPAR tys = tlist(COMMA, ty) COMMA? RPAR
-	{ RTtuple (List.rev tys) }
+rtype:
+  | typ = typ
+	{ [typ] }
+  | LPAR types = tlist(COMMA, typ) COMMA? RPAR
+	{ List.rev types }
 ;
 
 block:
@@ -90,11 +90,11 @@ stmt:
 	{ Sblock b }
   | i = stif
 	{ Sif i }
-  | VAR vars = separated_nonempty_list(COMMA, IDENT) ty = ty?
-	{ Sinit (vars, ty, []) }
-  | VAR vars = separated_nonempty_list(COMMA, IDENT) ty = ty?
+  | VAR vars = separated_nonempty_list(COMMA, IDENT) typ = typ?
+	{ Sinit (vars, typ, []) }
+  | VAR vars = separated_nonempty_list(COMMA, IDENT) typ = typ?
     SET values = expr_list
-	{ Sinit (vars, ty, values) }
+	{ Sinit (vars, typ, values) }
   | RETURN vs = separated_list(COMMA, expr)
 	{ Sreturn vs }
   | FOR body = block
