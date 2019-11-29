@@ -47,19 +47,19 @@ let rec string_of_expr fmt = function
   | Eident id ->
      Format.fprintf fmt "%s" id
   | Eaccess (exp, field) ->
-     Format.fprintf fmt "%a.%s" string_of_expr exp.expr field
+     Format.fprintf fmt "%a.%s" string_of_expr exp.desc field
   | Ecall (f, args) ->
      Format.fprintf fmt "%s(...)" f 
   | Eprint _ ->
      Format.fprintf fmt "fmt.Print(...)"
   | Eunop (op, expr) ->
-     Format.fprintf fmt "%a(%a)" string_of_unop op string_of_expr expr.expr
+     Format.fprintf fmt "%a(%a)" string_of_unop op string_of_expr expr.desc
   | Ebinop (op, l, r) ->
      Format.fprintf fmt "@[(%a %a@ %a)@]"
-       string_of_expr l.expr string_of_binop op string_of_expr r.expr
+       string_of_expr l.desc string_of_binop op string_of_expr r.desc
 
 let get_ident e =
-  match e.expr with
+  match e.desc with
   | Eident id ->
      id
   | _ as exp ->
@@ -68,7 +68,7 @@ let get_ident e =
 				         invert yellow string_of_expr exp close close) )
     
 let check_package pkg func func_loc =
-  match pkg.expr with
+  match pkg.desc with
   | Eident id when id = "fmt" ->
 	 if func <> "Print" then
        raise ( Syntax_error
@@ -97,10 +97,10 @@ let check_int n_str loc =
   else n
   
 let check_neg_int e =
-  match e.expr with
+  match e.desc with
   | Eunop (Uneg, arg) ->
      begin
-	   match arg.expr with
+	   match arg.desc with
 	   | Ecst (Cint n) ->
           check_int_size n e.loc;
           { arg with loc = e.loc }

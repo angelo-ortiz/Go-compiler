@@ -98,7 +98,7 @@ stmt:
   | RETURN vs = separated_list(COMMA, expr)
 	{ Sreturn vs }
   | FOR body = block
-	{ Sfor (None, { expr = Ecst (Cbool true); loc = Lexing.dummy_pos, Lexing.dummy_pos }, None, body) }
+	{ Sfor (None, { desc = Ecst (Cbool true); loc = Lexing.dummy_pos, Lexing.dummy_pos }, None, body) }
   | FOR cond = expr body = block
 	{ Sfor (None, cond, None, body) }
   | FOR init = shstmt? SMCOLON cond = expr SMCOLON post = shstmt? body= block
@@ -149,29 +149,29 @@ print:
 
 expr:
   | c = CST
-	{ { expr = Ecst c; loc = $loc(c) } }
+	{ { desc = Ecst c; loc = $loc(c) } }
   | n = INT
-	{ { expr = Ecst (Cint (Utils.check_int n $loc(n))); loc = $loc(n) } }
+	{ { desc = Ecst (Cint (Utils.check_int n $loc(n))); loc = $loc(n) } }
   | LPAR e = expr RPAR
 	{ e }
   | v = IDENT
-	{ { expr = Eident v; loc = $loc(v) } }
+	{ { desc = Eident v; loc = $loc(v) } }
   | s = expr DOT f = IDENT
-	{ { expr = Eaccess (s, f); loc = $loc } }
+	{ { desc = Eaccess (s, f); loc = $loc } }
   | f = IDENT actuals = delimited(LPAR, separated_list(COMMA, expr), RPAR)
-	{ { expr = Ecall (f, actuals); loc = $loc } }
+	{ { desc = Ecall (f, actuals); loc = $loc } }
   | print values = separated_list(COMMA, expr) RPAR
-	{ { expr = Eprint values; loc = $loc } }
+	{ { desc = Eprint values; loc = $loc } }
   | NOT e = expr
-	{ { expr = Eunop (Unot, e); loc = $loc } }
+	{ { desc = Eunop (Unot, e); loc = $loc } }
   | midrule(MINUS { Utils.incr_level () }) e = expr %prec unary_minus
-	{ Utils.decr_level (); Utils.check_neg_int { expr = Eunop (Uneg, e); loc = $loc } }
+	{ Utils.decr_level (); Utils.check_neg_int { desc = Eunop (Uneg, e); loc = $loc } }
   | STAR e = expr %prec unary_star
-	{ { expr = Eunop (Udref, e); loc = $loc } }
+	{ { desc = Eunop (Udref, e); loc = $loc } }
   | ADDR e = expr
-	{ { expr = Eunop (Uaddr, e); loc = $loc } }
+	{ { desc = Eunop (Uaddr, e); loc = $loc } }
   | l = expr op = binop r = expr
-	{ { expr = Ebinop (op, l, r); loc = $loc } }
+	{ { desc = Ebinop (op, l, r); loc = $loc } }
 ;
 
 %inline binop:

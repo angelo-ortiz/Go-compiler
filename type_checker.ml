@@ -1,196 +1,104 @@
 
 open Ty_ast
 
-exception UnificationFailure of Ty_ast.term * Ty_ast.term
-exception Typing_error of (Lexing.position * Lexing.position) * string
+exception Typing_error of Ast.loc * string
 
-module QVar = struct
-  type t = tvar
-  let compare v1 v2 = Pervasives.compare v1.id v2.id
-  let equal v1 v2 = v1.id = v2.id
-  let create = let r = ref 0 in fun () -> incr r; { id = !r; def = None }
-end
+module Smap = Map.Make(String)
 
-let rec pp fmt = function
-  | Tint -> Format.fprintf fmt "int"
-  | Tbool -> Format.fprintf fmt "bool"
-  | Tstring -> Format.fprintf fmt "str"
-  | Tstruct -> Format.fprintf fmt "struct"
-  | Tpointer t -> Format.fprintf fmt "*%a" pp t
-  | Tvar v -> pp_var fmt v
-            
-and pp_var fmt {id; def} =
-  Format.fprintf fmt "'%d" id;
-  match def with
-  | None -> ()
-  | Some t -> Format.fprintf fmt "[:=%a]" pp t
-            
-let rec head = function
-  | Tvar { id; def = Some t } ->
-     head t
-  | t ->
+(* let struct_env = ref Smap.empty *)
+let func_env = Smap.empty
+
+let rec string_of_type fmt = function
+  | Tint ->
+     Format.fprintf fmt "int"
+  | Tbool ->
+     Format.fprintf fmt "bool"
+  | Tstring ->
+     Format.fprintf fmt "str"
+  | Tstruct s ->
+     Format.fprintf fmt "%s" s
+  | Tfunc tl ->
+     Format.fprintf fmt "func"
+  | Tpointer t ->
+     Format.fprintf fmt "*%a" string_of_type t
+
+let type_of_unop loc op typ =
+  match op, typ with
+  | Ast.Unot, Tbool ->
+     Tbool
+  | Ast.Uneg, Tint ->
+     Tint
+  | Ast.Udref, Tpointer t ->
      t
+  | Ast.Uaddr, t ->
+     Tpointer t
+  | (Ast.Unot, (Tint|Tstring|Tstruct _|Tfunc _|Tpointer _))
+  | (Ast.Uneg, (Tstring|Tbool|Tstruct _| Tfunc _|Tpointer _))
+  | (Ast.Udref, (Tint|Tstring|Tbool|Tstruct _|Tfunc _)) ->
+     raise (Typing_error
+              (loc, Format.asprintf "invalid operation %s %a"
+                      (*Utils.string_of_unop op*) "op" string_of_type typ))
+
+let expected_type = function
+  | Ast.Badd | Ast.Bsub | Ast.Bmul | Ast.Bdiv | Ast.Bmod | Ast.Blt | Ast.Ble | Ast.Bgt | Ast.Bge ->
+     Some Tint
+  | Ast.Beq | Ast.Bneq ->
+     None
+  | Ast.Band | Ast.Bor ->
+     Some Tbool
   
-let rec canon t =
-  match head t with
-  | Tint | Tbool | Tstring | Tstruct as t ->
-     t
-  | Tpointer t ->
-     Tpointer (canon t)
-  | Tvar v as t ->
-     assert (v.def = None); t
+let verify_operand_type loc op typ = function
+  | None ->
+     typ
+  | Some exp_typ when typ = exp_typ ->
+     typ
+  | Some exp_typ ->
+     raise (Typing_error
+              (loc, Format.asprintf "cannot convert %a (type %a) to type %a"
+                      Utils.string_of_expr op string_of_type typ string_of_type exp_typ))
+    
+let loc =
+  Lexing.dummy_pos, Lexing.dummy_pos
 
-let unification_error t1 t2 = raise (UnificationFailure (canon t1, canon t2))
+let rec type_expr env e =
+  let tdesc, typ = compute_type env e in
+  { tdesc; typ }
   
-let rec occur v t =
-  match head t with
-  | Tint | Tbool | Tstring | Tstruct ->
-     false
-  | Tpointer t ->
-     occur v t
-  | Tvar w ->
-     QVar.equal v w
-
-let rec unify t1 t2 =
-  match head t1, head t2 with
-  | Tint, Tint | Tbool, Tbool | Tstring, Tstring | Tstruct, Tstruct ->
-     ()
-  | Tvar v, Tvar w when QVar.equal v w ->
-     ()
-  | Tvar v, t2 ->
-     if occur v t2 then unification_error t1 t2;
-     assert (v.def = None);
-     v.def <- Some t2
-  | t1, Tvar v ->
-     unify t2 t1
-  | Tpointer t1, Tpointer t2 ->
-     unify t1 t2
-  | _ -> unification_error t1 t2
-
-let cant_unify ty1 ty2 =
-  try let _ = unify ty1 ty2 in false with UnificationFailure _ -> true
-
-let rec free_vars t =
-  match head t with
-  | Tint | Tbool | Tstring | Tstruct ->
-     QVset.empty
-  | Tpointer t ->
-     free_vars t
-  | Tvar v ->
-     QVset.singleton v
-
-let empty : Ty_ast.env = { bindings = Smap.empty ; fvars = QVset.empty }
-
-let norm_qvset set =
-  QVset.fold (fun v s -> QVset.union s (free_vars (Tvar v))) set QVset.empty
-          
-let add gen var typ env =
-  let fvars_typ = free_vars typ in
-  let qvars, fvars =
-    if gen then
-      let env_fvars = norm_qvset env.fvars in
-      (* the free-var set doesn't change since those in `typ` are either
-       used in the schema (quantifier) or already in the environment *)
-      QVset.diff fvars_typ env_fvars, env_fvars
-    else
-      QVset.empty, QVset.union env.fvars fvars_typ      
-  in
-  { bindings = Smap.add var { qvars ; term = typ } env.bindings; fvars }
-
-let find v env =
-  let scheme = Smap.find v env.bindings in
-  let fresh_vars =
-    QVset.fold (fun v m -> QVmap.add v (Tvar (QVar.create ())) m)
-      scheme.qvars QVmap.empty in
-  let rec subs t =
-    match head t with
-    | Tint | Tbool | Tstring | Tstruct as t ->
-       t
-    | Tpointer t ->
-       Tpointer (subs t)
-    | Tvar w as t ->
-       try QVmap.find w fresh_vars
-       with Not_found -> t
-  in subs scheme.term
-
-let rec type_expr env = function
-  | _ -> Tint
-  (* | Var v ->
-   *    find v env
-   * | Const _ ->
-   *    Tint
-   * | Op "+" ->
-   *    Tarrow (Tproduct (Tint, Tint), Tint)
-   * | Op o ->
-   *    failwith ("undefined operator " ^ o)
-   * | Fun (x, body) ->
-   *    let x_typ = Tvar (V.create ()) in
-   *    let env = add false x x_typ env in
-   *    let body_typ = w env body in
-   *    Tarrow (x_typ, body_typ)
-   * | App (f, x) ->
-   *    let f_typ = w env f in
-   *    let x_typ = w env x in
-   *    let ret_typ = Tvar (V.create ()) in
-   *    unify f_typ (Tarrow (x_typ, ret_typ));
-   *    ret_typ
-   * | Pair (l, r) ->
-   *    Tproduct (w env l, w env r)
-   * | Let (x, e1, e2) ->
-   *    let e1_typ = w env e1 in
-   *    w (add true x e1_typ env) e2 *)
-
-let typeof e = canon (w empty e)
-
-(* 1 : int *)
-let () = assert (typeof (Const 1) = Tint)
-
-(* fun x -> x : 'a -> 'a *)
-let () = assert (match typeof (Fun ("x", Var "x")) with
-  | Tarrow (Tvar v1, Tvar v2) -> V.equal v1 v2
-  | _ -> false)
-
-(* fun x -> x+1 : int -> int *)
-let () = assert (typeof (Fun ("x", App (Op "+", Pair (Var "x", Const 1))))
-                 = Tarrow (Tint, Tint))
-
-(* fun x -> x+x : int -> int *)
-let () = assert (typeof (Fun ("x", App (Op "+", Pair (Var "x", Var "x"))))
-                 = Tarrow (Tint, Tint))
-
-(* let x = 1 in x+x : int *)
-let () =
-  assert (typeof (Let ("x", Const 1, App (Op "+", Pair (Var "x", Var "x"))))
-          = Tint)
-
-(* let id = fun x -> x in id 1 *)
-let () =
-  assert (typeof (Let ("id", Fun ("x", Var "x"), App (Var "id", Const 1)))
-          = Tint)
-
-(* let id = fun x -> x in id id 1 *)
-let () =
-  assert (typeof (Let ("id", Fun ("x", Var "x"),
-		       App (App (Var "id", Var "id"), Const 1)))
-          = Tint)
-
-(* let id = fun x -> x in (id 1, id (1,2)) : int * (int * int) *)
-let () =
-  assert (typeof (Let ("id", Fun ("x", Var "x"),
-		       Pair (App (Var "id", Const 1),
-			     App (Var "id", Pair (Const 1, Const 2)))))
-          = Tproduct (Tint, Tproduct (Tint, Tint)))
-
-(* app = fun f x -> let y = f x in y : ('a -> 'b) -> 'a -> 'b *)
-let () =
-  let ty =
-    typeof (Fun ("f", Fun ("x", Let ("y", App (Var "f", Var "x"), Var "y"))))
-  in
-  assert (match ty with
-    | Tarrow (Tarrow (Tvar v1, Tvar v2), Tarrow (Tvar v3, Tvar v4)) ->
-        V.equal v1 v3 && V.equal v2 v4
-    | _ -> false)
-                 
-let cant_type e =
-  try let _ = typeof e in false with UnificationFailure _ -> true
-
+and compute_type env e =
+  match e.Ast.desc with
+  | Ast.Ecst (Cint n) ->
+     TEint n, Tint
+  | Ast.Ecst (Cstring s) ->
+     TEstring s, Tstring
+  | Ast.Ecst (Cbool b) ->
+     TEbool b, Tbool
+  | Ast.Ecst Cnil ->
+     TEnil, Tpointer Tint (* TODO *)
+  | Ast.Eident v ->
+     begin
+       try TEident { id = v; level = 0 (*TODO*); offset = 0 (*TODO*)}, Smap.find v env
+       with Not_found -> raise (Typing_error (e.loc, Format.sprintf "undefined %s" v))
+     end
+  | Ast.Eaccess (str, field) ->
+     assert false
+  | Ast.Ecall (f, actuals) ->
+     begin
+       try
+         let formals, t, _ = Smap.find f func_env in
+         let actuals = List.map (type_expr env) actuals in
+         if List.exists2 (<>) formals actuals then raise; (* TODO: exact error location!!! *)
+         TEcall (f, List.map (type_expr env) actuals),
+         let _, t, _ = Smap.find f func_env in t (* ref *)
+       with Not_found -> failwith "" (*TODO*)
+     end
+  | Ast.Eprint el ->
+     TEprint (List.map (type_expr env) el), Tint
+  | Ast.Eunop (op, e) ->
+     let { tdesc; typ } as te = type_expr env e in
+     TEunop (op, te), type_of_unop e.loc op typ
+  | Ast.Ebinop (op, l, r) ->
+     let t_l = type_expr env l in
+     let exp_type = verify_operand_type l.loc l.desc t_l.typ (expected_type op) in
+     let t_r = type_expr env r in
+     let exp_type = verify_operand_type r.loc r.desc t_r.typ (Some exp_type) in
+     TEbinop (op, t_l, t_r), exp_type

@@ -7,74 +7,55 @@ type ident = {
     offset: int
   }
 
-type term =
+type typ =
   | Tint
-  | Tbool
   | Tstring
-  | Tstruct
-  | Tpointer of term
-  | Tvar of tvar
-          
-and tvar = {
-    id : int;
-    mutable def: term option
-  }
+  | Tbool
+  | Tstruct of string
+  | Tfunc of typ list
+  | Tpointer of typ
 
-module QVar : sig
-  type t = tvar
-  val compare : t -> t -> bool
-  val equal : t -> t -> bool
-  val create : unit -> t
-end
-
-module QVset : Set.S with type elt = QVar.t
 module Smap : Map.S with type key = string
-module QVmap : Map.S with type key = QVar.t
              
-type scheme = {
-    qvars : QVset.t;
-    term : term
-  }
-
-type env = {
-    bindings : scheme Smap.t;
-    fvars : QVset.t
-  }
+type env = typ Smap.t
 
 type texpr = {
-    expr : expr;
-    typ : term
+    tdesc : tdesc;
+    typ : typ
   }
            
-and expr =
-  | Ecst of Ast.constant
-  | Eident of ident
-  | Eaccess of string * string
-  | Ecall of string * texpr list
-  | Eprint of texpr list
-  | Eunop of Ast.unop * texpr
-  | Ebinop of Ast.binop * texpr * texpr
+and tdesc =
+  | TEint of Big_int.big_int
+  | TEstring of string
+  | TEbool of bool
+  | TEnil
+  | TEident of ident
+  | TEaccess of string * string
+  | TEcall of string * texpr list
+  | TEprint of texpr list
+  | TEunop of Ast.unop * texpr
+  | TEbinop of Ast.binop * texpr * texpr
 
-and block = {
-    vars : term Smap.t;
-    stmts : stmt list;
+and tblock = {
+    vars : typ Smap.t;
+    stmts : tstmt list;
     level : int
   }
           
-and stmt =
+and tstmt =
   | Snop
   | Sincr of texpr
   | Sdecr of texpr
-  | Sblock of block
-  | Sif of texpr * block * block
+  | Sblock of tblock
+  | Sif of texpr * tblock * tblock
   | Sassign of texpr list * texpr list
   | Sreturn of texpr list
-  | Sfor of texpr * block
+  | Sfor of texpr * tblock
 
-type struct_ = term Smap.t
-type func = term Smap.t * term list * block
+type struct_ = typ Smap.t
+type func = typ list * typ * tblock
          
-type file = {
+type tfile = {
     structs : struct_ Smap.t;
     functions : func Smap.t
   }
