@@ -157,7 +157,7 @@ expr:
   | v = IDENT
 	{ { desc = Eident v; loc = $loc(v) } }
   | s = expr DOT f = IDENT
-	{ { desc = Eaccess (s, f); loc = $loc } }
+	{ { desc = Eselect (s, f, $loc(f)); loc = $loc } }
   | f = IDENT actuals = delimited(LPAR, separated_list(COMMA, expr), RPAR)
 	{ { desc = Ecall (f, actuals); loc = $loc } }
   | print values = separated_list(COMMA, expr) RPAR

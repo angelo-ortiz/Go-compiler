@@ -46,12 +46,12 @@ let rec string_of_expr fmt = function
      Format.fprintf fmt "%a" string_of_constant cst
   | Eident id ->
      Format.fprintf fmt "%s" id
-  | Eaccess (exp, field) ->
+  | Eselect (exp, field, _) ->
      Format.fprintf fmt "%a.%s" string_of_expr exp.desc field
   | Ecall (f, args) ->
-     Format.fprintf fmt "%s(...)" f 
+     Format.fprintf fmt "%s()" f 
   | Eprint _ ->
-     Format.fprintf fmt "fmt.Print(...)"
+     Format.fprintf fmt "fmt.Print()"
   | Eunop (op, expr) ->
      Format.fprintf fmt "%a(%a)" string_of_unop op string_of_expr expr.desc
   | Ebinop (op, l, r) ->

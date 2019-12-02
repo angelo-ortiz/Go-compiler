@@ -1,19 +1,21 @@
 
 (* Typing grammar *) 
 
-type ident = {
-    id : string;
-    level : int;
-    offset: int
-  }
-
 type typ =
   | Tint
   | Tstring
   | Tbool
+  | Tnil
   | Tstruct of string
-  | Tfunc of typ list
+  | Ttuple of typ list
   | Tpointer of typ
+
+type var = {
+    id : string;
+    level : int;
+    offset: int;
+    typ: typ
+  }
 
 module Smap : Map.S with type key = string
              
@@ -29,15 +31,15 @@ and tdesc =
   | TEstring of string
   | TEbool of bool
   | TEnil
-  | TEident of ident
-  | TEaccess of string * string
+  | TEident of string
+  | TEselect of string * string
   | TEcall of string * texpr list
   | TEprint of texpr list
   | TEunop of Ast.unop * texpr
   | TEbinop of Ast.binop * texpr * texpr
 
 and tblock = {
-    vars : typ Smap.t;
+    vars : var Smap.t;
     stmts : tstmt list;
     level : int
   }
@@ -53,7 +55,7 @@ and tstmt =
   | Sfor of texpr * tblock
 
 type struct_ = typ Smap.t
-type func = typ list * typ * tblock
+type func = typ * typ * tblock
          
 type tfile = {
     structs : struct_ Smap.t;

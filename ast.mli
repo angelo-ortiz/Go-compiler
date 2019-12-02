@@ -29,7 +29,7 @@ type constant =
 type desc =
   | Ecst of constant
   | Eident of ident
-  | Eaccess of expr * ident
+  | Eselect of expr * ident * loc
   | Ecall of ident * expr list
   | Eprint of expr list
   | Eunop of unop * expr
