@@ -3,9 +3,9 @@ open Ty_ast
 
 exception Typing_error of Ast.loc * string
 
-module Smap = Map.Make(String)
+(* module Smap = Map.Make(String) *)
 
-let struct_env = ref Smap.empty
+let struct_env : Ty_ast.struct_ Smap.t ref = ref Smap.empty
 let func_env : Ty_ast.func Smap.t ref = ref Smap.empty
 
 let length_of_type = function
@@ -35,22 +35,26 @@ and string_of_type fmt = function
   | Tpointer t ->
      Format.fprintf fmt "*%a" string_of_type t
 
-let type_of_unop loc op typ =
-  match op, typ with
+let type_of_unop exp op t_exp =
+  match op, t_exp.typ with
   | Ast.Unot, Tbool ->
-     Tbool
+     Tbool, false
   | Ast.Uneg, Tint ->
-     Tint
+     Tint, false
   | Ast.Udref, Tpointer t ->
-     t
+     t, exp.Ast.desc <> Ast.Ecst Ast.Cnil
   | Ast.Uaddr, t ->
-     Tpointer t
+     if t_exp.left then Tpointer t, false
+     else raise (Typing_error (exp.loc, Format.asprintf "cannot take the address of %a"
+                                          Utils.string_of_expr exp.desc))
+  | Ast.Udref, Tnil ->
+     raise (Typing_error (exp.loc, Format.asprintf "invalid indirect of nil"))
   | (Ast.Unot, (Tint | Tstring | Tnil | Tstruct _ | Ttuple _ | Tpointer _))
   | (Ast.Uneg, (Tstring | Tbool | Tnil | Tstruct _ |  Ttuple _ | Tpointer _))
-  | (Ast.Udref, (Tint | Tstring | Tbool | Tnil | Tstruct _ |Ttuple _)) ->
+  | (Ast.Udref, (Tint | Tstring | Tbool | Tstruct _ |Ttuple _)) ->
      raise (Typing_error
-              (loc, Format.asprintf "invalid operation %s %a"
-                      (*Utils.string_of_unop op*) "op" string_of_type typ))
+              (exp.loc, Format.asprintf "invalid operation %a %a"
+                      Utils.string_of_unop op string_of_type t_exp.typ))
 
 let expected_type = function
   | Ast.Badd | Ast.Bsub | Ast.Bmul | Ast.Bdiv | Ast.Bmod | Ast.Blt | Ast.Ble | Ast.Bgt | Ast.Bge ->
@@ -77,23 +81,23 @@ let verify_operand_type op loc operand = function
 let loc =
   Lexing.dummy_pos, Lexing.dummy_pos
 
-let rec type_expr env e =
-  let tdesc, typ = compute_type env e in
-  { tdesc; typ }
+let rec type_expr env (e:Ast.expr) =
+  let tdesc, typ, left = compute_type env e in
+  { tdesc; typ; left }
   
 and compute_type (env:Ty_ast.var Smap.t) e =
-  match e.Ast.desc with
+  match e.desc with
   | Ast.Ecst (Cint n) ->
-     TEint n, Tint
+     TEint n, Tint, false
   | Ast.Ecst (Cstring s) ->
-     TEstring s, Tstring
+     TEstring s, Tstring, false
   | Ast.Ecst (Cbool b) ->
-     TEbool b, Tbool
+     TEbool b, Tbool, false
   | Ast.Ecst Cnil ->
-     TEnil, Tnil (* TODO *)
+     TEnil, Tnil, false (* TODO *)
   | Ast.Eident v ->
      begin
-       try TEident v, let feats = Smap.find v env in feats.typ
+       try TEident v, (let feats = Smap.find v env in feats.typ), true
        with Not_found -> raise (Typing_error (e.loc, Format.sprintf "undefined %s" v))
      end
   | Ast.Eselect (str, fd, fd_loc) ->
@@ -104,7 +108,7 @@ and compute_type (env:Ty_ast.var Smap.t) e =
           begin
             try
               let fields = Smap.find s !struct_env in
-              Smap.find fd fields
+              TEselect (s, fd), Smap.find fd fields, t_str.left
             with Not_found ->
               raise (Typing_error
                        (fd_loc, Format.asprintf "%a.%s undefined (type %a has no field %s)"
@@ -122,20 +126,21 @@ and compute_type (env:Ty_ast.var Smap.t) e =
        try
          let formals, rtype, _ = Smap.find f !func_env in
          let actuals : Ty_ast.texpr list = check_fun_params env f e.loc formals actuals in
-         TEcall (f, actuals), rtype
+         TEcall (f, actuals), rtype, false
        with Not_found -> raise (Typing_error (e.loc, Format.sprintf "undefined %s" f))
      end
-  | Ast.Eprint el ->
-     TEprint (check_print_params env el), Tint
+  (* | Ast.Eprint el ->
+   *    TEprint (check_expr_list env el), Tint, false *)
   | Ast.Eunop (op, e) ->
      let t_e = type_expr env e in
-     TEunop (op, t_e), type_of_unop e.loc op t_e.typ
+     let typ, left = type_of_unop e op t_e in
+     TEunop (op, t_e), typ, left
   | Ast.Ebinop (op, l, r) ->
      let t_l = type_expr env l in
      let exp_type = verify_operand_type op l.loc l.desc (expected_type op, t_l.typ) in
      let t_r = type_expr env r in
      let exp_type = verify_operand_type op r.loc r.desc (Some exp_type, t_r.typ) in
-     TEbinop (op, t_l, t_r), exp_type
+     TEbinop (op, t_l, t_r), exp_type, false
 
 and check_fun_params env f loc formals actuals : Ty_ast.texpr list =
   let t_formals = match formals with | Ttuple l -> l | _ as t -> [t] in
@@ -191,7 +196,7 @@ and check_fun_params env f loc formals actuals : Ty_ast.texpr list =
                         (List.map (fun act -> (type_expr env act).typ) actuals)
                         string_of_type_list t_formals))
     
-and check_print_params env = function
+let check_expr_list env = function
   | [] ->
      []
   | [p] ->
@@ -214,4 +219,54 @@ and check_print_params env = function
                  | _ ->
                     t_p
        ) pl
-       
+
+let rec type_stmt (env:Ty_ast.var Smap.t) = function
+  | Ast.Snop ->
+     TSnop
+  | Ast.Sexec (Ieval e) ->
+     begin
+       match e.desc with
+       | Ecst _ | Eident _ | Eselect _ | Eunop _ | Ebinop _ ->
+          raise (Typing_error
+                   (e.loc, Format.asprintf "%a evaluated but not used" Utils.string_of_expr e.desc))
+       | Ecall (f, actuals) ->
+          let t_call = type_expr env e in
+          let actuals = match t_call.tdesc with | TEcall (_, act) -> act | _ -> assert false in
+          TScall (f, actuals)
+     end
+  | Ast.Sexec (Iprint el) ->
+     TSprint (check_expr_list env el)
+  | Ast.Sexec (Iincr e) ->
+     let t_e = type_expr env e in
+     if t_e.left then
+       if t_e.typ = Tint then TSincr t_e
+       else raise (Typing_error
+                     (e.loc,
+                      Format.asprintf "invalid operation %a++ (non-numeric type %a)"
+              Utils.string_of_expr e.desc string_of_type t_e.typ))
+     else raise (Typing_error
+                   (e.loc, Format.asprintf "cannot assign to %a" Utils.string_of_expr e.desc))
+  | Ast.Sexec (Idecr e) ->
+     let t_e = type_expr env e in
+     if t_e.left then
+       if t_e.typ = Tint then TSdecr t_e
+       else raise (Typing_error
+                     (e.loc,
+                      Format.asprintf "invalid operation %a-- (non-numeric type %a)"
+              Utils.string_of_expr e.desc string_of_type t_e.typ))
+     else raise (Typing_error
+                   (e.loc, Format.asprintf "cannot assign to %a" Utils.string_of_expr e.desc))
+  | Ast.Sexec (Iset (ls, vs)) ->
+     assert false (* TODO *)
+  | Ast.Sexec (Iassign (vars, values)) ->
+     assert false (* TODO *)
+  | Ast.Sblock b ->
+     assert false (* TODO *)
+  | Ast.Sif (cond, bif, belse) ->
+     assert false (* TODO *)
+  | Ast.Sinit (vars, ty, values) ->
+     assert false (* TODO *)
+  | Ast.Sreturn (exps) ->
+     TSreturn (check_expr_list env exps)
+  | Ast.Sfor (init, cond, post, block) ->
+     assert false (* TODO *)

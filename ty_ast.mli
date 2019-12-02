@@ -7,7 +7,7 @@ type typ =
   | Tbool
   | Tnil
   | Tstruct of string
-  | Ttuple of typ list
+  | Ttuple of typ list (* 0 or >= 2 types *)
   | Tpointer of typ
 
 type var = {
@@ -23,7 +23,8 @@ type env = typ Smap.t
 
 type texpr = {
     tdesc : tdesc;
-    typ : typ
+    typ : typ;
+    left : bool
   }
            
 and tdesc =
@@ -34,7 +35,6 @@ and tdesc =
   | TEident of string
   | TEselect of string * string
   | TEcall of string * texpr list
-  | TEprint of texpr list
   | TEunop of Ast.unop * texpr
   | TEbinop of Ast.binop * texpr * texpr
 
@@ -45,14 +45,16 @@ and tblock = {
   }
           
 and tstmt =
-  | Snop
-  | Sincr of texpr
-  | Sdecr of texpr
-  | Sblock of tblock
-  | Sif of texpr * tblock * tblock
-  | Sassign of texpr list * texpr list
-  | Sreturn of texpr list
-  | Sfor of texpr * tblock
+  | TSnop
+  | TSprint of texpr list
+  | TScall of string * texpr list
+  | TSincr of texpr
+  | TSdecr of texpr
+  | TSblock of tblock
+  | TSif of texpr * tblock * tblock
+  | TSassign of texpr list * texpr list
+  | TSreturn of texpr list
+  | TSfor of texpr * tblock
 
 type struct_ = typ Smap.t
 type func = typ * typ * tblock
