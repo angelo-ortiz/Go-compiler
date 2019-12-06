@@ -31,6 +31,7 @@ type desc =
   | Eident of ident
   | Eselect of expr * ident * loc
   | Ecall of ident * expr list
+  | Eprint of expr list
   | Eunop of unop * expr
   | Ebinop of binop * expr * expr
 
@@ -41,11 +42,10 @@ and expr = {
           
 and shstmt =
   | Ieval of expr
-  | Iprint of expr list
   | Iincr of expr
   | Idecr of expr
-  | Iset of expr list * expr list
-  | Iassign of ident list * expr list
+  | Iassign of expr list * expr list
+  | Ideclare of ident list * expr list
              
 and block = stmt list
           

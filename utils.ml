@@ -2,6 +2,7 @@
 open Format
    
 open Ast
+open Ty_ast
 open Lexing
 
 exception Syntax_error of Ast.loc * string
@@ -50,14 +51,38 @@ let rec string_of_expr fmt = function
      Format.fprintf fmt "%a.%s" string_of_expr exp.desc field
   | Ecall (f, args) ->
      Format.fprintf fmt "%s()" f 
-  (* | Eprint _ ->
-   *    Format.fprintf fmt "fmt.Print()" *)
+  | Eprint _ ->
+     Format.fprintf fmt "fmt.Print()"
   | Eunop (op, expr) ->
      Format.fprintf fmt "%a(%a)" string_of_unop op string_of_expr expr.desc
   | Ebinop (op, l, r) ->
      Format.fprintf fmt "@[(%a %a@ %a)@]"
        string_of_expr l.desc string_of_binop op string_of_expr r.desc
 
+let rec string_of_texpr fmt = function
+  | TEint n ->
+     Format.fprintf fmt "%s" (Big_int.string_of_big_int n)
+  | TEstring str ->
+     Format.fprintf fmt "%s" str
+  | TEbool b ->
+     Format.fprintf fmt "%s" (if b then "true" else "false")
+  | TEnil ->
+     Format.fprintf fmt "nil"
+  | TEident id ->
+     Format.fprintf fmt "%s" id
+  | TEselect (struct_, field) ->
+     Format.fprintf fmt "%s.%s" struct_ field
+  | TEcall (f, args) ->
+     Format.fprintf fmt "%s()" f 
+  | TEprint _ ->
+     Format.fprintf fmt "fmt.Print()"
+  | TEunop (op, texpr) ->
+     Format.fprintf fmt "%a(%a)" string_of_unop op string_of_texpr texpr.tdesc
+  | TEbinop (op, l, r) ->
+     Format.fprintf fmt "@[(%a %a@ %a)@]"
+       string_of_texpr l.tdesc string_of_binop op string_of_texpr r.tdesc
+
+    
 let get_ident e =
   match e.desc with
   | Eident id ->

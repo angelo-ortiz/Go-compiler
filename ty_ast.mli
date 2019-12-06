@@ -6,14 +6,15 @@ type typ =
   | Tstring
   | Tbool
   | Tnil
+  | Tunit
   | Tstruct of string
-  | Ttuple of typ list (* 0 or >= 2 types *)
+  | Ttuple of typ list (* >= 2 types *)
   | Tpointer of typ
 
 type var = {
     id : string;
-    level : int;
-    offset: int;
+    mutable level : int;
+    mutable offset: int;
     typ: typ
   }
 
@@ -24,7 +25,8 @@ type env = typ Smap.t
 type texpr = {
     tdesc : tdesc;
     typ : typ;
-    left : bool
+    is_assignable : bool;
+    loc : Ast.loc;
   }
            
 and tdesc =
@@ -35,6 +37,7 @@ and tdesc =
   | TEident of string
   | TEselect of string * string
   | TEcall of string * texpr list
+  | TEprint of texpr list
   | TEunop of Ast.unop * texpr
   | TEbinop of Ast.binop * texpr * texpr
 
@@ -46,13 +49,14 @@ and tblock = {
           
 and tstmt =
   | TSnop
-  | TSprint of texpr list
   | TScall of string * texpr list
+  | TSprint of texpr list
   | TSincr of texpr
   | TSdecr of texpr
   | TSblock of tblock
   | TSif of texpr * tblock * tblock
   | TSassign of texpr list * texpr list
+  | TSdeclare of texpr list * texpr list
   | TSreturn of texpr list
   | TSfor of texpr * tblock
 

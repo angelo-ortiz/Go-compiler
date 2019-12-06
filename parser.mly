@@ -132,16 +132,16 @@ assign:
 shstmt:
   | e = expr
 	{ Ieval e }
-  | print values = separated_list(COMMA, expr) RPAR
-  	{ Iprint values }
+  /* | print values = separated_list(COMMA, expr) RPAR */
+  /* 	{ Iprint values } */
   | e = expr INCR
 	{ Iincr e }
   | e = expr DECR
 	{ Idecr e }
   | exps = expr_list SET values = expr_list
-	{ Iset (exps, values)  }
+	{ Iassign (exps, values)  }
   | vars = assign values = expr_list
-	{ Iassign (List.rev vars, values) }
+	{ Ideclare (List.rev vars, values) }
 ;
 
 print:
@@ -162,8 +162,8 @@ expr:
 	{ { desc = Eselect (s, f, $loc(f)); loc = $loc } }
   | f = IDENT actuals = delimited(LPAR, separated_list(COMMA, expr), RPAR)
 	{ { desc = Ecall (f, actuals); loc = $loc } }
-  /* | print values = separated_list(COMMA, expr) RPAR */
-  /* 	{ { desc = Eprint values; loc = $loc } } */
+  | print values = separated_list(COMMA, expr) RPAR
+  	{ { desc = Eprint values; loc = $loc } }
   | NOT e = expr
 	{ { desc = Eunop (Unot, e); loc = $loc } }
   | midrule(MINUS { Utils.incr_level () }) e = expr %prec unary_minus
