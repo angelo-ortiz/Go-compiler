@@ -39,27 +39,31 @@ file:
 	{ { imp = imp, $loc(imp); decls = decls } }
 ;
 
-tlist(sep, tok):
+rev_tlist(sep, tok):
   | t = tok
 	{ [t] }
-  | ts = tlist(sep, tok) sep t = tok
+  | ts = rev_tlist(sep, tok) sep t = tok
 	{ t :: ts }
 ;
 
-poslist(sep, tok):
+rev_poslist(sep, tok):
   | t = tok
 	{ [t, $loc(t)] }
-  | ts = poslist(sep, tok) sep t = tok
+  | ts = rev_poslist(sep, tok) sep t = tok
 	{ (t, $loc(t)) :: ts }
+;
+
+poslist(sep, tok):
+  exps = rev_poslist(sep, tok) { List.rev exps}
 ;
 
 decl:
   | TYPE s = IDENT STRUCT BEGIN
-    fields = loption(terminated(tlist(SMCOLON, vars), SMCOLON?))
+    fields = loption(terminated(rev_tlist(SMCOLON, vars), SMCOLON?))
     END SMCOLON
 	{ Dstruct ((s, $loc(s)), List.rev fields) }
   | FUNC f = IDENT LPAR
-    params = loption(terminated(tlist(COMMA, vars), COMMA?))
+    params = loption(terminated(rev_tlist(COMMA, vars), COMMA?))
     RPAR rtype = loption(rtype) block = block SMCOLON
 	{ Dfunc ((f, $loc(f)), List.rev params, rtype, block) }
 ;
@@ -79,7 +83,7 @@ typ:
 rtype:
   | typ = typ
 	{ [typ] }
-  | LPAR types = tlist(COMMA, typ) COMMA? RPAR
+  | LPAR types = rev_tlist(COMMA, typ) COMMA? RPAR
 	{ List.rev types }
 ;
 

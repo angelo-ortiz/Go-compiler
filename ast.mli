@@ -36,16 +36,16 @@ type desc =
   | Ebinop of binop * expr * expr
 
 and expr = {
-    desc: desc;
-    loc: loc;
+    desc: desc;  (* AST expression *)
+    loc: loc;    (* location in code *)
   }
           
 and shstmt =
   | Ieval of expr
   | Iincr of expr
   | Idecr of expr
-  | Iassign of expr list * expr list
-  | Ideclare of ident list * expr list
+  | Iassign of expr list * expr list   (* = *)
+  | Ideclare of ident list * expr list (* := *)
              
 and block = stmt list
           
@@ -54,17 +54,17 @@ and stmt =
   | Sexec of shstmt
   | Sblock of block
   | Sif of expr * block * block
-  | Sinit of ident list * typ option * expr list
+  | Sinit of ident list * typ option * expr list (* var ... *)
   | Sreturn of expr list
   | Sfor of shstmt option * expr * shstmt option * block
 
-and vars = ident list * typ
+and vars = ident list * typ (* list of identifiers, type *)
          
 and decl =
-  | Dstruct of ident * vars list
-  | Dfunc of ident * vars list * typ list * block
+  | Dstruct of ident * vars list                   (* name, list of fields *)
+  | Dfunc of ident * vars list * typ list * block  (* name, list of formal arguments, return type, body *)
 
 type file = {
-    imp : bool * loc;
-    decls : decl list;
+    imp : bool * loc;   (* true iff "fmt" was imported *)
+    decls : decl list;  (* list of structure/function declarations *)
   }

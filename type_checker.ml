@@ -1,7 +1,7 @@
 
 open Ty_ast
 
-(* Convention of function return type:
+(* Function return conventions:
  *** 0 -> unit
  *** 1 -> tau
  *** 2+ -> list of tau 
@@ -99,13 +99,54 @@ let verify_operand_type op loc term = function
      type_error loc (Format.asprintf "cannot convert %a (type %a) to type %a"
                        Utils.string_of_expr term Utils.string_of_type typ
                        Utils.string_of_type exp_typ)
+
+let single_texpr_compatible_types ty_ref ty_act loc f_msg =
+  match ty_ref, ty_act with
+  | t_r, t_a when t_r = t_a ->
+     ()
+  | TTpointer _, TTnil ->
+     ()
+  | TTuntyped, (TTint | TTstring | TTbool | TTstruct _ | TTpointer _) ->
+     ()
+  | TTuntyped, TTnil ->
+     type_error loc (Format.asprintf "use of untyped nil")        
+  | TTuntyped, _ | _, (TTunit | TTuntyped | TTtuple _) ->
+     assert false
+  | t_f, t_a ->
+     type_error loc (f_msg ())
     
+let multi_texpr_compatible_types ty_ref te_act f_msg =
+  match ty_ref, te_act.typ with
+  | t_r, t_a when t_r = t_a ->
+     te_act
+  | TTpointer _, TTnil ->
+     (* TTnil's "unification" *)
+     { te_act with typ = ty_ref }
+  | TTuntyped, (TTint | TTstring | TTbool | TTstruct _ | TTpointer _) ->
+     (* useless for checking of function parameters *)
+     te_act
+  | _, TTunit ->
+     type_error te_act.loc
+       (Format.asprintf "%a used as value" Utils.string_of_texpr te_act)
+  | _, TTtuple _ ->
+     type_error te_act.loc
+       (Format.asprintf "multiple-value %a in single-value context"
+          Utils.string_of_texpr te_act)
+  | TTuntyped, TTnil ->
+     type_error te_act.loc (Format.asprintf "use of untyped nil")
+  | t_r, t_a ->
+     type_error te_act.loc
+       (Format.asprintf "cannot use %a (type %a) as type %a in %s"
+          Utils.string_of_texpr te_act Utils.string_of_type t_a Utils.string_of_type t_r f_msg)
+
 let new_var id level ?(offset=0) ?(loc=dummy_loc) typ =
   { id; level; offset; typ; loc }
 
+(* unique variable `_` *)
 let underscore =
   { id = "_"; level = 0; offset = 0; typ = TTuntyped; loc = dummy_loc }
 
+(* unique expression `_` *)
 let under_texpr =
   { tdesc = TEident "_"; typ = TTuntyped; is_assignable = true; loc = dummy_loc }
   
@@ -230,9 +271,9 @@ and check_fun_params env f loc formals actuals =
   let ty_formals = List.map snd formals in
   match actuals with
   | [act] ->
-     let t_act = type_expr env act in
+     let te_act = type_expr env act in
      let ty_actuals =
-       match t_act.typ with
+       match te_act.typ with
        | TTtuple l ->
           l
        | TTunit ->
@@ -243,26 +284,21 @@ and check_fun_params env f loc formals actuals =
      let cmp_act_form = compare (List.length ty_actuals) (List.length ty_formals) in
      if cmp_act_form = 0 then begin
          List.iter2
-           (fun ff aa ->
-             match ff, aa with
-             | t_f, t_a when t_f = t_a ->
-                ()
-             | TTpointer _, TTnil ->
-                ()
-             | TTuntyped, (TTint | TTstring | TTbool | TTstruct _ | TTpointer _) ->
-                ()
-             | TTuntyped, _ ->
-                assert false
-             | t_f, t_a ->
-                type_error act.loc
-                  (Format.asprintf "cannot use %a value as type %a in argument to %s"
-                     Utils.string_of_type t_a Utils.string_of_type t_f f)
-           ) ty_formals ty_actuals;  
-         [t_act]
+           (fun t_f t_a ->
+             single_texpr_compatible_types t_f t_a act.loc
+               (fun _ -> Format.asprintf "cannot use %a value as type %a in argument to %s"
+                           Utils.string_of_type t_a Utils.string_of_type t_f f)
+           ) ty_formals ty_actuals;
+         match ty_actuals with
+         | [t_act] when t_act = TTnil ->
+            (* TTnil's "unification" *)
+            [{ te_act with typ = List.hd ty_formals }]
+         | _ ->
+            [te_act]
        end else
        let msg = if cmp_act_form > 0 then "too many" else "not enough" in
        type_error loc
-         (Format.asprintf "%s arguments in call to %s\n\t\t have %a\n\t\t want %a"
+         (Format.asprintf "%s arguments in call to %s\n\t have %a\n\t want %a"
             msg f Utils.string_of_type_list ty_actuals Utils.string_of_type_list ty_formals)
   | _  ->
      let cmp_act_form = compare (List.length actuals) (List.length ty_formals) in
@@ -270,28 +306,12 @@ and check_fun_params env f loc formals actuals =
          List.map2
            (fun ty_form act -> 
              let t_act = type_expr env act in
-             match ty_form, t_act.typ with
-             | t_f, t_a when t_f = t_a ->
-                t_act
-             | TTpointer _, TTnil ->
-                (* TTnil's "unification" *)
-                { t_act with typ = ty_form }
-             | _, TTunit ->
-                type_error act.loc
-                  (Format.asprintf "%a used as value" Utils.string_of_expr act.desc)
-             | _, TTtuple _ ->
-                type_error act.loc
-                  (Format.asprintf "multiple-value %a in single-value context"
-                     Utils.string_of_expr act.desc)
-             | t_f, t_a ->
-                type_error act.loc
-                  (Format.asprintf "cannot use %a (type %a) as type %a in argument to %s"
-                     Utils.string_of_expr act.desc Utils.string_of_type t_a Utils.string_of_type t_f f)
+             multi_texpr_compatible_types ty_form t_act (Format.sprintf "argument to %s" f)
            ) ty_formals actuals 
        end else
        let msg = if cmp_act_form > 0 then "too many" else "not enough" in
        type_error loc
-         (Format.asprintf "%s arguments in call to %s\n\t\t have %a\n\t\t want %a"
+         (Format.asprintf "%s arguments in call to %s\n\t have %a\n\t want %a"
             msg f Utils.string_of_type_list (List.map (fun act -> (type_expr env act).typ) actuals)
             Utils.string_of_type_list ty_formals)
 
@@ -312,23 +332,18 @@ let check_assignment env loc to_be_assigned values =
      let l_values = List.length t_values in
      if l_assigned = l_values then begin
          List.iter2
-           (fun t_ass vv ->
-             match t_ass.typ, vv with
-             | t_a, t_v when t_a = t_v ->
-                ()
-             | TTpointer _, TTnil ->
-                ()
-             | TTuntyped, (TTint | TTstring | TTbool | TTstruct _ | TTpointer _) ->
-                ()
-             | _, (TTunit | TTuntyped | TTtuple _) ->
-                assert false
-             | TTuntyped, TTnil ->
-                type_error value.loc (Format.asprintf "use of untyped nil")
-             | t_a, t_v ->
-                type_error value.loc
-                  (Format.asprintf "cannot assign %a to %a (type %a) in multiple assignment"
-                     Utils.string_of_type t_v Utils.string_of_texpr t_ass.tdesc
-                     Utils.string_of_type t_a)
+           (fun te_ass t_v ->
+             let f_msg =
+               if l_values = 1
+               then fun _ ->
+                    Format.asprintf "cannot use %a (type %a) as type %a in multiple assignment"
+                      Utils.string_of_texpr te_value Utils.string_of_type t_v
+                      Utils.string_of_type te_ass.typ
+               else fun _ ->
+                    Format.asprintf "cannot assign %a to %a (type %a) in multiple assignment"
+                      Utils.string_of_type t_v Utils.string_of_texpr te_ass
+                      Utils.string_of_type te_ass.typ in
+             single_texpr_compatible_types te_ass.typ t_v te_value.loc f_msg
            ) to_be_assigned t_values;
          match t_values with
          | [t_val] when t_val = TTnil ->
@@ -344,29 +359,9 @@ let check_assignment env loc to_be_assigned values =
      let l_values = List.length values in
      if l_assigned = l_values then begin
          List.map2
-           (fun t_ass val_ ->
-             let t_val = type_expr env val_ in
-             match t_ass.typ, t_val.typ with
-             | t_a, t_v when t_a = t_v ->
-                t_val
-             | TTpointer _, TTnil ->
-                (* TTnil's "unification" *)
-                { t_val with typ = t_ass.typ }
-             | TTuntyped, (TTint | TTstring | TTbool | TTstruct _ | TTpointer _) ->
-                t_val
-             | _, TTunit ->
-                type_error val_.loc
-                  (Format.asprintf "%a used as value" Utils.string_of_expr val_.desc)
-             | _, TTtuple _ ->
-                type_error val_.loc
-                  (Format.asprintf "multiple-value %a in single-value context"
-                     Utils.string_of_expr val_.desc)
-             | TTuntyped, TTnil ->
-                type_error val_.loc (Format.asprintf "use of untyped nil")
-             | t_a, t_v ->
-                type_error val_.loc
-                  (Format.asprintf "cannot use %a (type %a) as type %a in assignment"
-                     Utils.string_of_expr val_.desc Utils.string_of_type t_v Utils.string_of_type t_a)
+           (fun te_ass val_ ->
+             let te_val = type_expr env val_ in
+             multi_texpr_compatible_types te_ass.typ te_val "assignment"
            ) to_be_assigned values 
        end else
        type_error loc
@@ -625,7 +620,7 @@ let type_vars_list msg =
   
 let rec identify_declarations structs functions = function
   | [] ->
-     structs, functions
+     structs, List.rev functions
   | Ast.Dstruct ((name, loc), fields) :: decls ->
      begin
        try let _, previous_loc = Smap.find name !struct_env in
@@ -638,7 +633,7 @@ let rec identify_declarations structs functions = function
          struct_env := Smap.add name (Smap.empty, loc) !struct_env
      end;
      identify_declarations ((name, loc, fields) :: structs) functions decls
-    | Ast.Dfunc ((name, loc), args, rtype, body)  :: decls ->
+    | Ast.Dfunc ((name, loc), args, rtype, body) :: decls ->
        identify_declarations structs ((name, loc, args, rtype, body) :: functions) decls
 
 let check_fun_sign (name, loc, args, rtype, body) =
@@ -680,8 +675,8 @@ let type_fun_body (name, _, _, _, _) =
   let tbody = Typed { vars; stmts; level = 0 } in
   func_env := Smap.add name (args, rtype, tbody, loc) !func_env
 
-let check_recursive_struct root =
-  let rec dfs_scan (fields, loc) =
+let check_recursive_struct root ((fields, loc) as str) =
+  let rec dfs_scan (fs, _) =
     Smap.iter
       (fun _ -> function
         | TTstruct curr when curr = root -> 
@@ -690,8 +685,8 @@ let check_recursive_struct root =
            dfs_scan (Smap.find curr !struct_env)
         | _ ->
            ()
-      ) fields
-  in dfs_scan
+      ) fs
+  in dfs_scan str
 
 exception Found_main
    
@@ -764,7 +759,10 @@ let rec scan_tstmt loc env use_queue exp_rtype = function
      let env, use_queue, fin_else = scan_block loc env use_queue exp_rtype belse in
      env, use_queue, fin_if && fin_else
   | TSassign (to_be_assigned, values) ->
-     let env, use_queue = scan_texpr_list env use_queue to_be_assigned in
+     (* left variables do not count *)
+     let used_texprs =
+       List.filter (fun exp -> match exp.tdesc with | TEident _ -> false | _ -> true) to_be_assigned in
+     let env, use_queue = scan_texpr_list env use_queue used_texprs in
      let env, use_queue = scan_texpr_list env use_queue values in
      env, use_queue, false
   | TSdeclare (vars, values) ->
@@ -773,13 +771,13 @@ let rec scan_tstmt loc env use_queue exp_rtype = function
        (fun env v ->
          if v.id = "_" then env else Smap.add v.id (0, v.loc) env
        ) env vars, use_queue, false
-  | TSreturn tactuals ->
-     let env, use_queue = scan_texpr_list env use_queue tactuals in
+  | TSreturn te_actuals ->
+     let env, use_queue = scan_texpr_list env use_queue te_actuals in
      begin
-       match tactuals with
-       | [tact] ->
+       match te_actuals with
+       | [te_act] ->
           let act_rtype =
-            match tact.typ with
+            match te_act.typ with
             | TTtuple tl ->
                tl
             | _ as t ->
@@ -789,14 +787,12 @@ let rec scan_tstmt loc env use_queue exp_rtype = function
           if cmp_exp_act = 0 then begin
               List.iter2
                 (fun exp act ->
-                  (* TODO use match + TTnil's unification *)
-                  (* unify these matches into a single fct returning the act_val??? *)
-                  if act <> exp then
-                    type_error tact.loc
-                      (Format.asprintf "cannot use %a value as type %a in return argument"
-                         Utils.string_of_type act Utils.string_of_type exp)
+                  single_texpr_compatible_types exp act te_act.loc
+                    (fun _ ->
+                      Format.asprintf "cannot use %a value as type %a in return argument"
+                        Utils.string_of_type act Utils.string_of_type exp)
                 ) exp_rtype act_rtype;
-              let env, use_queue = scan_texpr env use_queue tact in
+              let env, use_queue = scan_texpr env use_queue te_act in
               env, use_queue, true
             end else
             let msg = if cmp_exp_act > 0 then "not enough" else "too many" in
@@ -804,29 +800,27 @@ let rec scan_tstmt loc env use_queue exp_rtype = function
               (Format.asprintf "%s arguments to return\n\t have %a\n\t want %a"
                  msg Utils.string_of_type_list act_rtype Utils.string_of_type_list exp_rtype)
        | _ ->
-          let cmp_exp_act = compare (List.length exp_rtype) (List.length tactuals) in
+          let cmp_exp_act = compare (List.length exp_rtype) (List.length te_actuals) in
           if cmp_exp_act = 0 then begin
               let env, use_queue =
                 List.fold_left2
-                  (fun (env, queue) exp act ->
-                    if act.typ <> exp then
-                      type_error act.loc
-                        (Format.asprintf "cannot use %a (type %a) as type %a in return argument"
-                           Utils.string_of_texpr act.tdesc Utils.string_of_type act.typ
-                           Utils.string_of_type exp);
-                    scan_texpr env queue act
-                  ) (env, use_queue) exp_rtype tactuals in
+                  (fun (env, queue) exp te_act ->
+                    ignore (multi_texpr_compatible_types exp te_act "return argument");
+                    scan_texpr env queue te_act
+                  ) (env, use_queue) exp_rtype te_actuals in
               env, use_queue, true
             end else
             let msg = if cmp_exp_act > 0 then "not enough" else "too many" in
             type_error loc
               (Format.asprintf "%s arguments to return\n\t have %a\n\t want %a"
-                 msg Utils.string_of_type_list (List.map (fun te -> te.typ) tactuals)
+                 msg Utils.string_of_type_list (List.map (fun te -> te.typ) te_actuals)
                  Utils.string_of_type_list exp_rtype)
      end
   | TSfor (cond, body) ->
-(* TODO *)
-     env, use_queue, true
+     let sure_entry = cond.tdesc = TEbool true in
+     let env, use_queue = scan_texpr env use_queue cond in
+     let env, use_queue, fin_for = scan_block loc env use_queue exp_rtype body in
+     env, use_queue, sure_entry && fin_for
 
 and scan_block loc env use_queue rtype block =
   let b_env, b_queue, final =
@@ -850,7 +844,7 @@ let check_fun_return name (args, rtype, body, loc) =
     | _ as t ->
        [t]
   in
-  let env, use_queue, final = scan_block loc env [] exp_rtype block in
+  let env, _, final = scan_block loc env [] exp_rtype block in
   if not final && exp_rtype <> [] then type_error loc "missing return at end of function"
                    
 let type_file file =
@@ -862,7 +856,6 @@ let type_file file =
   List.iter type_fun_body functions;
   Smap.iter check_fun_return !func_env;
   Smap.iter check_recursive_struct !struct_env;
-  Smap.iter check_fun_return !func_env;
   check_func_main functions;
   if !import_fmt <> !used_fmt then
     type_error import_loc "imported and not used: \"fmt\"";

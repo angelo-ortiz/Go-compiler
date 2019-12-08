@@ -18,7 +18,7 @@ val string_of_constant : Format.formatter -> Ast.constant -> unit
 val string_of_expr : Format.formatter -> Ast.desc -> unit
 val string_of_type_list : Format.formatter -> Ty_ast.t_typ list -> unit
 val string_of_type : Format.formatter -> Ty_ast.t_typ -> unit
-val string_of_texpr : Format.formatter -> Ty_ast.tdesc -> unit
+val string_of_texpr : Format.formatter -> Ty_ast.texpr -> unit
 val list_fst_rev : ('a  * 'b) list -> 'a list -> 'a list 
 val get_ident : Ast.expr * Ast.loc -> Ast.ident
 val check_package : Ast.expr -> string -> Ast.loc -> unit

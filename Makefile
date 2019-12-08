@@ -4,12 +4,19 @@ BIN=pgoc
 TEST=./test.sh
 FLAGS=
 
-all: $(BIN)
-	./$(BIN) test.logo
+all: $(BIN) test_typing
+	#cd tests && $(TEST) -all ../$(BIN)
 
-.PHONY: test_syntax #test_typing test_exec
+.PHONY: test_syntax test_typing test_compilation
 
 test_syntax: $(BIN)
+	cd tests && $(TEST) -1 ../$(BIN)
+
+test_typing: $(BIN)
+	cd tests && $(TEST) -2 ../$(BIN)
+
+test_compilation: $(BIN)
+	cd tests && $(TEST) -3 ../$(BIN)
 
 $(BIN): $(CMO)
 	ocamlc $(FLAGS) -o $(BIN) nums.cma $(CMO) #zarith.cma

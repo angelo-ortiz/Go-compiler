@@ -3,19 +3,19 @@ type t_typ =
   | TTint
   | TTstring
   | TTbool
-  | TTnil
-  | TTunit
-  | TTuntyped
+  | TTnil                  (* type of nil before "unification" *)
+  | TTunit                 (* return type = [] *)
+  | TTuntyped              (* for Go's type inference in declarations *)
   | TTstruct of string
-  | TTtuple of t_typ list (* >= 2 types *)
+  | TTtuple of t_typ list  (* return type = _ :: _ :: [] *)
   | TTpointer of t_typ
 
 type tvar = {
-    id : string;
-    level : int;
-    mutable offset: int;
-    typ: t_typ;
-    loc : Ast.loc;
+    id : string;          (* variable name *)
+    level : int;          (* depth *)
+    mutable offset: int;  (* offset w.r.t the base pointer *)
+    typ: t_typ;           (* type *)
+    loc : Ast.loc;        (* location in code *)
   }
 
 module Smap = Map.Make(String)
@@ -23,10 +23,10 @@ module Smap = Map.Make(String)
 type env = t_typ Smap.t
 
 type texpr = {
-    tdesc : tdesc;
-    typ : t_typ;
-    is_assignable : bool;
-    loc : Ast.loc;
+    tdesc : tdesc;         (* typed expression *)
+    typ : t_typ;           (* type *)
+    is_assignable : bool;  (* true iff left-value *)
+    loc : Ast.loc;         (* location in code *)
   }
            
 and tdesc =
@@ -34,7 +34,7 @@ and tdesc =
   | TEstring of string
   | TEbool of bool
   | TEnil
-  | TEnew of t_typ
+  | TEnew of t_typ  (* the function new is simulated on the go *)
   | TEident of string
   | TEselect of texpr * string
   | TEcall of string * texpr list
@@ -43,9 +43,9 @@ and tdesc =
   | TEbinop of Ast.binop * texpr * texpr
 
 and tblock = {
-    vars : tvar Smap.t;
-    stmts : tstmt list;
-    level : int
+    vars : tvar Smap.t;  (* declared variables *)
+    stmts : tstmt list;  (* list of statements *)
+    level : int          (* depth *)
   }
           
 and tstmt =
@@ -65,8 +65,8 @@ type fblock =
   | Untyped of Ast.block
   | Typed of tblock
            
-type struct_ = t_typ Smap.t * Ast.loc
-type func = (string * t_typ) list * t_typ * fblock * Ast.loc
+type struct_ = t_typ Smap.t * Ast.loc                         (* map of fields, declaration locus *)
+type func = (string * t_typ) list * t_typ * fblock * Ast.loc  (* list of (formal, type), return type, body, declaration locus *)
          
 type tfile = {
     structs : struct_ Smap.t;

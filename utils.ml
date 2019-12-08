@@ -47,7 +47,7 @@ let string_of_binop fmt = function
 									  
 let string_of_constant fmt = function
   | Cint n -> Format.fprintf fmt "%s" (Big_int.string_of_big_int n)
-  | Cstring str -> Format.fprintf fmt "%s" str
+  | Cstring str -> Format.fprintf fmt "\"%s\"" str
   | Cbool b -> Format.fprintf fmt (if b then "true" else "false")
   | Cnil -> Format.fprintf fmt "nil"
 			  
@@ -92,7 +92,8 @@ and string_of_type fmt = function
   | TTpointer t ->
      Format.fprintf fmt "*%a" string_of_type t
 
-let rec string_of_texpr fmt = function
+let rec string_of_texpr fmt te =
+  match te.tdesc with
   | TEint n ->
      Format.fprintf fmt "%s" (Big_int.string_of_big_int n)
   | TEstring str ->
@@ -106,16 +107,16 @@ let rec string_of_texpr fmt = function
   | TEident id ->
      Format.fprintf fmt "%s" id
   | TEselect (struct_, field) ->
-     Format.fprintf fmt "%a.%s" string_of_texpr struct_.tdesc field
+     Format.fprintf fmt "%a.%s" string_of_texpr struct_ field
   | TEcall (f, args) ->
      Format.fprintf fmt "%s()" f 
   | TEprint _ ->
      Format.fprintf fmt "fmt.Print()"
   | TEunop (op, texpr) ->
-     Format.fprintf fmt "%a(%a)" string_of_unop op string_of_texpr texpr.tdesc
+     Format.fprintf fmt "%a(%a)" string_of_unop op string_of_texpr texpr
   | TEbinop (op, l, r) ->
      Format.fprintf fmt "@[(%a %a@ %a)@]"
-       string_of_texpr l.tdesc string_of_binop op string_of_texpr r.tdesc
+       string_of_texpr l string_of_binop op string_of_texpr r
 
 let rec list_fst_rev rem acc =
   match rem with 
