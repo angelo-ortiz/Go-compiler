@@ -1,6 +1,4 @@
 
-(* Typing grammar *) 
-
 type t_typ =
   | TTint
   | TTstring
@@ -17,11 +15,11 @@ type tvar = {
     level : int;
     mutable offset: int;
     typ: t_typ;
-    loc : Ast.loc
+    loc : Ast.loc;
   }
 
-module Smap : Map.S with type key = string
-             
+module Smap = Map.Make(String)
+
 type env = t_typ Smap.t
 
 type texpr = {
@@ -72,5 +70,5 @@ type func = (string * t_typ) list * t_typ * fblock * Ast.loc
          
 type tfile = {
     structs : struct_ Smap.t;
-    functions : func Smap.t;
+    functions : func Smap.t
   }

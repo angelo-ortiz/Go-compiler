@@ -36,7 +36,7 @@
 
 file:
   PACKAGE SMCOLON imp = boption(IMPORT) decls = decl* EOF
-	{ { imp = imp; decls = decls } }
+	{ { imp = imp, $loc(imp); decls = decls } }
 ;
 
 tlist(sep, tok):
@@ -46,25 +46,32 @@ tlist(sep, tok):
 	{ t :: ts }
 ;
 
+poslist(sep, tok):
+  | t = tok
+	{ [t, $loc(t)] }
+  | ts = poslist(sep, tok) sep t = tok
+	{ (t, $loc(t)) :: ts }
+;
+
 decl:
   | TYPE s = IDENT STRUCT BEGIN
     fields = loption(terminated(tlist(SMCOLON, vars), SMCOLON?))
     END SMCOLON
-	{ Dstruct (s, List.rev fields) }
+	{ Dstruct ((s, $loc(s)), List.rev fields) }
   | FUNC f = IDENT LPAR
     params = loption(terminated(tlist(COMMA, vars), COMMA?))
     RPAR rtype = loption(rtype) block = block SMCOLON
-	{ Dfunc (f, List.rev params, rtype, block) }
+	{ Dfunc ((f, $loc(f)), List.rev params, rtype, block) }
 ;
 
 vars:
-  vars = separated_nonempty_list(COMMA, IDENT)  typ = typ
+  vars = poslist(COMMA, IDENT)  typ = typ
 	{ vars, typ }
 ;
 
 typ:
   | typ = IDENT
-	{ Tbasic typ }
+	{ Tbasic (typ, $loc(typ)) }
   | STAR typ = typ
 	{ Tpointer typ }
 ;
@@ -88,12 +95,11 @@ stmt:
 	{ Sexec i }
   | b = block
 	{ Sblock b }
-  | i = stif
-	{ Sif i }
-  | VAR vars = separated_nonempty_list(COMMA, IDENT) typ = typ?
-	{ Sinit (vars, typ, []) }
-  | VAR vars = separated_nonempty_list(COMMA, IDENT) typ = typ?
-    SET values = expr_list
+  | st_if = stif
+	{ st_if }
+  | VAR vars = poslist(COMMA, IDENT) typ = typ
+	{ Sinit (vars, Some typ, []) }
+  | VAR vars = poslist(COMMA, IDENT) typ = typ? SET values = expr_list
 	{ Sinit (vars, typ, values) }
   | RETURN vs = separated_list(COMMA, expr)
 	{ Sreturn vs }
@@ -101,32 +107,32 @@ stmt:
 	{ Sfor (None, { desc = Ecst (Cbool true); loc = Lexing.dummy_pos, Lexing.dummy_pos }, None, body) }
   | FOR cond = expr body = block
 	{ Sfor (None, cond, None, body) }
-  | FOR init = shstmt? SMCOLON cond = expr SMCOLON post = shstmt? body= block
+  | FOR init = shstmt? SMCOLON cond = expr SMCOLON post = shstmt? body = block
 	{ Sfor (init, cond, post, body) }
 ;
 
 stif:
   | IF e = expr b = block
-	{ e, b, ELblock [] }
-  | IF e = expr b = block ELSE el = block
-	{ e, b, ELblock el }
-  | IF e = expr b = block ELSE el = stif
-	{ e, b, ELif el }
+	{ Sif (e, b, []) }
+  | IF e = expr b = block ELSE b_el = block
+	{ Sif (e, b, b_el) }
+  | IF e = expr b = block ELSE b_el = stif
+	{ Sif (e, b, [b_el]) }
 ;
 
 rev_expr_list:
-  | e = expr { [e] }
+  | e = expr { [e, $loc(e)] }
   | exps = rev_expr_list COMMA e = expr
-	{ e :: exps }
+	{ (e, $loc(e)) :: exps }
 ;
 
 expr_list:
-  exps = rev_expr_list { List.rev exps }
+  exps = rev_expr_list { Utils.list_fst_rev exps [] }
 ;
 
 assign:
   vars = rev_expr_list ASSIGN
-	{ List.map (Utils.get_ident) vars }
+	{ List.map Utils.get_ident vars }
 ;
 
 shstmt:
@@ -159,7 +165,7 @@ expr:
   | v = IDENT
 	{ { desc = Eident v; loc = $loc(v) } }
   | s = expr DOT f = IDENT
-	{ { desc = Eselect (s, f, $loc(f)); loc = $loc } }
+	{ { desc = Eselect (s, (f, $loc(f))); loc = $loc } }
   | f = IDENT actuals = delimited(LPAR, separated_list(COMMA, expr), RPAR)
 	{ { desc = Ecall (f, actuals); loc = $loc } }
   | print values = separated_list(COMMA, expr) RPAR

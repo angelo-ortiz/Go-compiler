@@ -7,8 +7,8 @@ open Utils
 
 let usage = "usage: pgoc [options] file.go"
 
-let parse_only = ref true (* false *)
-let type_only = ref false
+let parse_only = ref false
+let type_only = ref true (* false *)
 
 let spec =
   [ "--parse-only", Arg.Set parse_only, " stop after parsing";
@@ -25,20 +25,18 @@ let file =
   | Some f -> f
   | None -> Arg.usage spec usage; exit 1
 
-let report (b, e) =
-  let line = b.pos_lnum in
-  let fchar = b.pos_cnum - b.pos_bol + 1 in
-  let lchar = e.pos_cnum - e.pos_bol in
-  Format.eprintf "File \"%s\", line %d, characters %d-%d:\n" file line fchar lchar
+let report loc =
+  let line, fst_char, last_char = Utils.position_of_loc loc in
+  Format.eprintf "File \"%s\", line %d, characters %d-%d:\n" file line fst_char last_char
 
 let () =
   let ch = open_in file in
   let lb = Lexing.from_channel ch in
   try
-    let f = Parser.file Lexer.next_token lb in
+    let ast_file = Parser.file Lexer.next_token lb in
     close_in ch;
     if !parse_only then exit 0;
-    (* typing here *)
+    let type_file = Type_checker.type_file ast_file in ();
     if !type_only then exit 0;
   with
   | Lexer.Lexing_error s ->
@@ -53,6 +51,10 @@ let () =
   | Utils.Syntax_error (loc, msg) ->
      report loc;
      Format.eprintf "%ssyntax error%s: %s@." Utils.red Utils.close msg;
+     exit 1
+  | Type_checker.Type_error (loc, msg) ->
+     report loc;
+     Format.eprintf "%stype error%s: %s@." Utils.red Utils.close msg;
      exit 1
   | e ->
      Format.eprintf "%sunrecognised error%s: %s%s%s@."

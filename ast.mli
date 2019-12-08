@@ -1,10 +1,10 @@
 
 (* Parsing grammar *)
 
-type ident = string
-
 type loc = Lexing.position * Lexing.position
 
+type ident = string * loc
+         
 type typ =
   | Tbasic of ident
   | Tpointer of typ
@@ -28,9 +28,9 @@ type constant =
 
 type desc =
   | Ecst of constant
-  | Eident of ident
-  | Eselect of expr * ident * loc
-  | Ecall of ident * expr list
+  | Eident of string
+  | Eselect of expr * ident
+  | Ecall of string * expr list
   | Eprint of expr list
   | Eunop of unop * expr
   | Ebinop of binop * expr * expr
@@ -53,16 +53,10 @@ and stmt =
   | Snop
   | Sexec of shstmt
   | Sblock of block
-  | Sif of stif
+  | Sif of expr * block * block
   | Sinit of ident list * typ option * expr list
   | Sreturn of expr list
   | Sfor of shstmt option * expr * shstmt option * block
-
-and stelse =
-  | ELblock of block
-  | ELif of stif 
-          
-and stif = expr * block * stelse
 
 and vars = ident list * typ
          
@@ -71,6 +65,6 @@ and decl =
   | Dfunc of ident * vars list * typ list * block
 
 type file = {
-    imp : bool;
+    imp : bool * loc;
     decls : decl list;
   }
