@@ -19,6 +19,14 @@
 		   	  with Not_found -> IDENT id
 
   let str_buf = Buffer.create 1024
+  let str_start_p = ref None
+
+  let set_start_pos lb =
+  	  match !str_start_p with
+	  | Some p ->
+	  	lb.lex_start_p <- p
+	  | None ->
+	  	assert false
 
   let smcolon_state = ref None
 
@@ -41,7 +49,7 @@ rule token = parse
   | "import" 				{ import lexbuf }
   | "package" 				{ package lexbuf }
   | integer as n			{ INT n }
-  | '"'						{ CST (Cstring (string lexbuf)) }
+  | '"'						{ str_start_p := Some lexbuf.lex_start_p; CST (Cstring (string lexbuf)) }
   | "/*"	  	  	 		{ comment lexbuf }
   | ":="					{ ASSIGN }
   | "=="					{ CMP Beq }
@@ -77,7 +85,7 @@ rule token = parse
 
 and string = parse
   | '"'   					{ let str = Buffer.contents str_buf in
-  							  Buffer.reset str_buf; str }
+  							  Buffer.reset str_buf; set_start_pos lexbuf; str }
   | "\\\\"					{ Buffer.add_char str_buf '\\'; string lexbuf }
   | "\\\""					{ Buffer.add_char str_buf '\"'; string lexbuf }
   | "\\n"					{ Buffer.add_char str_buf '\n'; string lexbuf }
