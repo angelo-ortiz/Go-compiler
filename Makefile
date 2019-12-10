@@ -7,7 +7,7 @@ FLAGS=
 all: $(BIN) test_typing
 	#cd tests && $(TEST) -all ../$(BIN)
 
-.PHONY: test_syntax test_typing test_compilation
+.PHONY: test_syntax test_typing test_compil
 
 test_syntax: $(BIN)
 	cd tests && $(TEST) -1 ../$(BIN)
@@ -15,7 +15,7 @@ test_syntax: $(BIN)
 test_typing: $(BIN)
 	cd tests && $(TEST) -2 ../$(BIN)
 
-test_compilation: $(BIN)
+test_compil: $(BIN)
 	cd tests && $(TEST) -3 ../$(BIN)
 
 $(BIN): $(CMO)
