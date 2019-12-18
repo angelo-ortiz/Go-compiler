@@ -65,10 +65,19 @@ type fblock =
   | Untyped of Ast.block
   | Typed of tblock
            
-type struct_ = t_typ Smap.t * Ast.loc                         (* map of fields, declaration locus *)
-type func = (string * t_typ) list * t_typ * fblock * Ast.loc  (* list of (formal, type), return type, body, declaration locus *)
+type decl_struct = {
+    fields : (string * t_typ) list;  (* list of (field, type) *)
+    loc : Ast.loc;          (* declaration locus *)
+  }
+                 
+type decl_fun = {
+    formals: (string * t_typ) list;  (* list of (formal, type)*)
+    rtype: t_typ;                    (* return type *)
+    body: fblock;                    (* body *)
+    loc : Ast.loc;                   (* declaration locus *)
+  }
          
 type tfile = {
-    structs : struct_ Smap.t;
-    functions : func Smap.t
+    structs : decl_struct Smap.t;
+    functions : decl_fun Smap.t
   }

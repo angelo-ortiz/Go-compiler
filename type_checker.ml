@@ -9,8 +9,8 @@ open Ty_ast
    
 exception Type_error of Ast.loc * string
 
-let struct_env : Ty_ast.struct_ Smap.t ref = ref Smap.empty
-let func_env : Ty_ast.func Smap.t ref = ref Smap.empty
+let struct_env : Ty_ast.decl_struct Smap.t ref = ref Smap.empty
+let func_env : Ty_ast.decl_fun Smap.t ref = ref Smap.empty
 let import_fmt = ref false
 let used_fmt = ref false
 
@@ -49,7 +49,7 @@ let rec type_of_ast_typ = function
   | Ast.Tpointer typ ->
      TTpointer (type_of_ast_typ typ)
 
-let type_of_unop exp op t_exp =
+let type_of_unop exp op (t_exp:Ty_ast.texpr) =
   match op, t_exp.typ with
   | Ast.Unot, TTbool ->
      TTbool, false
@@ -115,7 +115,7 @@ let single_texpr_compatible_types ty_ref ty_act loc f_msg =
   | t_f, t_a ->
      type_error loc (f_msg ())
     
-let multi_texpr_compatible_types ty_ref te_act f_msg =
+let multi_texpr_compatible_types ty_ref (te_act:Ty_ast.texpr) f_msg =
   match ty_ref, te_act.typ with
   | t_r, t_a when t_r = t_a ->
      te_act
@@ -188,8 +188,8 @@ and compute_type env e =
        | TTstruct s | TTpointer (TTstruct s) as t ->
           begin
             try
-              let fields, _ = Smap.find s !struct_env in
-              TEselect (t_str, fd), Smap.find fd fields, t_str.is_assignable
+              let { fields; loc = _ } = Smap.find s !struct_env in
+              TEselect (t_str, fd), List.assoc fd fields, t_str.is_assignable
             with Not_found ->
               type_error fd_loc (Format.asprintf "%a.%s undefined (type %a has no field %s)"
                                    Utils.string_of_expr str.desc fd Utils.string_of_type t fd)
@@ -212,7 +212,7 @@ and compute_type env e =
        with Not_found ->
          (* check if f has been defined as a function *)
          try
-           let formals, rtype, _, _ = Smap.find f !func_env in
+           let { formals; rtype; body = _; loc = _ } = Smap.find f !func_env in
            let actuals = check_fun_params env f e.loc formals actuals in
            TEcall (f, actuals), rtype, false
          with Not_found ->
@@ -600,37 +600,39 @@ and type_nested_stmt env stmts ?ending_stmt level =
        loop env var_map stmts ending_stmt (t_st :: t_stmts) level
   in loop env Smap.empty stmts ending_stmt [] level
 
-let rec type_vars_of_decl (vars, typ) typ_list var_map msg =
+let rec type_vars_of_decl (vars, typ) typ_list msg =
   match vars with
   | [] ->
-     typ_list, var_map
+     typ_list
   | (id, loc) :: vars ->
      try
-       let _ = Smap.find id var_map in
+       let _ = List.assoc id typ_list in
        type_error loc (Format.asprintf "duplicate %s %s" msg id)
      with Not_found ->
-       type_vars_of_decl (vars, typ) ((id, typ) :: typ_list) (Smap.add id typ var_map) msg
+       type_vars_of_decl (vars, typ) ((id, typ) :: typ_list) msg
 
-let type_vars_list msg =
-  List.fold_left
-    (fun (typ_list, var_map) (vars, typ) ->
-      let typ = type_of_ast_typ typ in
-      type_vars_of_decl (vars, typ) typ_list var_map msg
-    ) ([], Smap.empty)
+let type_vars_list msg vars =
+  List.rev (
+      List.fold_left
+        (fun typ_list (vars, typ) ->
+          let typ = type_of_ast_typ typ in
+          type_vars_of_decl (vars, typ) typ_list msg
+        ) [] vars
+    )
   
 let rec identify_declarations structs functions = function
   | [] ->
-     structs, List.rev functions
+     List.rev structs, List.rev functions
   | Ast.Dstruct ((name, loc), fields) :: decls ->
      begin
-       try let _, previous_loc = Smap.find name !struct_env in
+       try let { fields = _; loc = previous_loc } = Smap.find name !struct_env in
            let line, fst_char, last_char = Utils.position_of_loc previous_loc in
            type_error loc
              (Format.asprintf
                 "%s redeclared in this block\n\t previous declaration in characters %d-%d at line %d"
                 name fst_char last_char line)
        with Not_found ->
-         struct_env := Smap.add name (Smap.empty, loc) !struct_env
+         struct_env := Smap.add name { fields = []; loc } !struct_env
      end;
      identify_declarations ((name, loc, fields) :: structs) functions decls
     | Ast.Dfunc ((name, loc), args, rtype, body) :: decls ->
@@ -638,7 +640,7 @@ let rec identify_declarations structs functions = function
 
 let check_fun_sign (name, loc, args, rtype, body) =
   try
-    let _, _, _, previous_loc = Smap.find name !func_env in
+    let { formals = _; rtype = _; body = _; loc = previous_loc } = Smap.find name !func_env in
     let line, fst_char, last_char = Utils.position_of_loc previous_loc in
     type_error loc
       (Format.asprintf
@@ -646,9 +648,9 @@ let check_fun_sign (name, loc, args, rtype, body) =
          name fst_char last_char line)
   with Not_found ->
     (* check arguments *)
-    let args_list, var_map = type_vars_list "argument" args in
+    let formals = type_vars_list "argument" args in
     (* check return type *)
-    let t_rtype =
+    let rtype =
       match List.map type_of_ast_typ rtype with
       | [] ->
          TTunit
@@ -657,35 +659,34 @@ let check_fun_sign (name, loc, args, rtype, body) =
       | _ as ts ->
          TTtuple ts
     in
-    let t_args = List.rev args_list in
-    func_env := Smap.add name (t_args, t_rtype, Untyped body, loc) !func_env
+    func_env := Smap.add name { formals; rtype; body = Untyped body; loc } !func_env
 
 let type_struct_fields (name, loc, fields) =
   (* type fields *)
-  let _, field_map = type_vars_list "field" fields in
-  struct_env := Smap.add name (field_map, loc) !struct_env
+  let fields = type_vars_list "field" fields in
+  struct_env := Smap.add name { fields; loc } !struct_env
 
 let type_fun_body (name, _, _, _, _) =
-  let args, rtype, ubody, loc = Smap.find name !func_env in
+  let func = Smap.find name !func_env in
   let env = List.fold_left
-              (fun env (id, t) -> Smap.add id (new_var id 0 t) env) Smap.empty args in
-  let body = match ubody with Untyped b -> b | Typed _ -> assert false in
+              (fun env (id, t) -> Smap.add id (new_var id 0 t) env) Smap.empty func.formals in
+  let body = match func.body with Untyped b -> b | Typed _ -> assert false in
   let vars, stmts = type_nested_stmt env body 1 in
   (* check return *)
   let tbody = Typed { vars; stmts; level = 0 } in
-  func_env := Smap.add name (args, rtype, tbody, loc) !func_env
+  func_env := Smap.add name { func with body = tbody } !func_env
 
-let check_recursive_struct root ((fields, loc) as str) =
-  let rec dfs_scan (fs, _) =
-    Smap.iter
-      (fun _ -> function
-        | TTstruct curr when curr = root -> 
+let check_recursive_struct root ({ fields; loc } as str) =
+  let rec dfs_scan curr_struct =
+    List.iter
+      (function
+        | _, TTstruct curr when curr = root -> 
            type_error loc  (Format.asprintf "invalid recursive type %s" root)
-        | TTstruct curr ->
+        | _, TTstruct curr ->
            dfs_scan (Smap.find curr !struct_env)
         | _ ->
            ()
-      ) fs
+      ) curr_struct.fields
   in dfs_scan str
 
 exception Found_main
@@ -832,8 +833,8 @@ and scan_block loc env use_queue rtype block =
   let env, use_queue = reduce_queue env use_queue b_queue in
   env, use_queue, final
     
-let check_fun_return name (args, rtype, body, loc) =
-  let env = List.fold_left (fun env (id, _) -> Smap.add id (0, loc) env) Smap.empty args in
+let check_fun_return name { formals; rtype; body; loc } =
+  let env = List.fold_left (fun env (id, _) -> Smap.add id (0, loc) env) Smap.empty formals in
   let block = match body with | Typed b -> b | Untyped _ -> assert false in
   let exp_rtype =
     match rtype with
@@ -848,8 +849,8 @@ let check_fun_return name (args, rtype, body, loc) =
   if not final && exp_rtype <> [] then type_error loc "missing return at end of function"
                    
 let type_file file =
-  import_fmt := fst file.Ast.imp;
-  let import_loc = snd file.Ast.imp in
+  import_fmt := fst file.Ast.import;
+  let import_loc = snd file.Ast.import in
   let structs, functions = identify_declarations [] [] file.Ast.decls in
   List.iter check_fun_sign functions;
   List.iter type_struct_fields structs;

@@ -66,11 +66,20 @@ and tstmt =
 type fblock =
   | Untyped of Ast.block
   | Typed of tblock
-           
-type struct_ = t_typ Smap.t * Ast.loc
-type func = (string * t_typ) list * t_typ * fblock * Ast.loc
+
+type decl_struct = {
+    fields : (string * t_typ) list;
+    loc : Ast.loc;
+  }
+                 
+type decl_fun = {
+    formals: (string * t_typ) list;
+    rtype: t_typ;
+    body: fblock;
+    loc : Ast.loc;
+  }
          
 type tfile = {
-    structs : struct_ Smap.t;
-    functions : func Smap.t;
+    structs : decl_struct Smap.t;
+    functions : decl_fun Smap.t
   }

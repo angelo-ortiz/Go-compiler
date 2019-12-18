@@ -35,8 +35,8 @@
 %%
 
 file:
-  PACKAGE SMCOLON imp = boption(IMPORT) decls = decl* EOF
-	{ { imp = imp, $loc(imp); decls = decls } }
+  PACKAGE SMCOLON import = boption(IMPORT) decls = decl* EOF
+	{ { import = import, $loc(import); decls = decls } }
 ;
 
 rev_tlist(sep, tok):

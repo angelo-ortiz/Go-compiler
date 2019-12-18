@@ -65,6 +65,6 @@ and decl =
   | Dfunc of ident * vars list * typ list * block  (* name, list of formal arguments, return type, body *)
 
 type file = {
-    imp : bool * loc;   (* true iff "fmt" was imported *)
+    import : bool * loc;   (* true iff "fmt" was imported *)
     decls : decl list;  (* list of structure/function declarations *)
   }
