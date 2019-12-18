@@ -52,7 +52,7 @@ let () =
      report loc;
      Format.eprintf "%ssyntax error%s: %s@." Utils.red Utils.close msg;
      exit 1
-  | Type_checker.Type_error (loc, msg) ->
+  | Utils.Type_error (loc, msg) ->
      report loc;
      Format.eprintf "%stype error%s: %s@." Utils.red Utils.close msg;
      exit 1

@@ -35,7 +35,7 @@
 %%
 
 file:
-  PACKAGE SMCOLON import = boption(IMPORT) decls = decl* EOF
+  | PACKAGE SMCOLON import = boption(IMPORT) decls = decl* EOF
 	{ { import = import, $loc(import); decls = decls } }
 ;
 
@@ -54,7 +54,8 @@ rev_poslist(sep, tok):
 ;
 
 poslist(sep, tok):
-  exps = rev_poslist(sep, tok) { List.rev exps}
+  | exps = rev_poslist(sep, tok)
+	{ List.rev exps }
 ;
 
 decl:
@@ -69,7 +70,7 @@ decl:
 ;
 
 vars:
-  vars = poslist(COMMA, IDENT)  typ = typ
+  | vars = poslist(COMMA, IDENT)  typ = typ
 	{ vars, typ }
 ;
 
@@ -131,11 +132,11 @@ rev_expr_list:
 ;
 
 expr_list:
-  exps = rev_expr_list { Utils.list_fst_rev exps [] }
+  | exps = rev_expr_list { Utils.list_fst_rev exps [] }
 ;
 
 assign:
-  vars = rev_expr_list ASSIGN
+  | vars = rev_expr_list ASSIGN
 	{ List.map Utils.get_ident vars }
 ;
 
@@ -155,7 +156,7 @@ shstmt:
 ;
 
 print:
-  fmt = expr DOT print = IDENT LPAR
+  | fmt = expr DOT print = IDENT LPAR
 	{ Utils.check_package fmt print $loc(print) }
 ;
 

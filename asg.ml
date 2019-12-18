@@ -67,7 +67,7 @@ type fblock =
            
 type decl_struct = {
     fields : (string * t_typ) list;  (* list of (field, type) *)
-    loc : Ast.loc;          (* declaration locus *)
+    loc : Ast.loc;                   (* declaration locus *)
   }
                  
 type decl_fun = {

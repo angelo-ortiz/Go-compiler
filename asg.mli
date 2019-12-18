@@ -1,4 +1,5 @@
 
+(* Abstract semantic graph *)
 (* Typing grammar *) 
 
 type t_typ =
