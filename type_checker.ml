@@ -144,7 +144,7 @@ and compute_type env e =
          (* check if f has been defined as a function *)
          try
            let { formals; rtype; body = _; loc = _ } = Smap.find f !func_env in
-           let actuals = check_fun_params env f e.loc formals actuals in
+           let actuals = type_fun_params env f e.loc formals actuals in
            TEcall (f, actuals), rtype, false
          with Not_found ->
            (* check if f is a built-in function *)
@@ -165,7 +165,7 @@ and compute_type env e =
      if not !import_fmt then
        Utils.type_error e.loc "undefined: fmt";
      used_fmt := true;
-     TEprint (check_expr_list env el), TTunit, false
+     TEprint (type_expr_list env el), TTunit, false
   | Ast.Eunop (op, e) ->
      let t_e = type_expr env e in
      let typ, is_assignable = type_of_unop e op t_e in
@@ -178,7 +178,7 @@ and compute_type env e =
      let _ = Utils.verify_operand_type op r.loc r.desc (Some left_exp_type, t_r.typ) in
      TEbinop (op, t_l, t_r), type_of_binop op, false
 
-and check_expr_list env = function
+and type_expr_list env = function
   | [] ->
      []
   | [p] ->
@@ -199,7 +199,7 @@ and check_expr_list env = function
        ) pl
     
 (* Checks if the types of the actual params match the expected ones (formal params) *)
-and check_fun_params env f loc formals actuals =
+and type_fun_params env f loc formals actuals =
   let ty_formals = List.map snd formals in
   match actuals with
   | [act] ->
@@ -247,7 +247,7 @@ and check_fun_params env f loc formals actuals =
             msg f Utils.string_of_type_list (List.map (fun act -> (type_expr env act).typ) actuals)
             Utils.string_of_type_list ty_formals)
 
-let check_assignment env loc to_be_assigned values =
+let type_assigned_values env loc to_be_assigned values =
   let l_assigned = List.length to_be_assigned in
   match values with
   | [value] ->
@@ -350,14 +350,14 @@ let rec type_shstmt env b_vars level = function
                                         t_ass
                           ) assigned_s in
      let loc = try (List.hd values).loc with Failure _ -> assert false in
-     let t_values = check_assignment env loc t_assigned_s values in
+     let t_values = type_assigned_values env loc t_assigned_s values in
      b_vars, TSassign (t_assigned_s, t_values)
   | Ast.Ideclare (vars, values) ->
      (* Behaviour in Go: this can also assign values provided at least one left var is new *)
      (* the 'local' environment is updated by the declaration statement *)
      let untyped_vars = List.map expr_placeholder vars in
      let loc = try (List.hd values).loc with Failure _ -> assert false in
-     let t_values = check_assignment env loc untyped_vars values in
+     let t_values = type_assigned_values env loc untyped_vars values in
      let types =
        match t_values with
        | [{ tdesc; typ = TTtuple types; is_assignable; loc }] ->
@@ -454,7 +454,7 @@ let rec type_stmt env b_vars level = function
                List.map expr_placeholder vars
           in
           let loc = (List.hd values).loc in
-          let t_values = check_assignment env loc vars_ph values in
+          let t_values = type_assigned_values env loc vars_ph values in
           let types =
             match t_values with
             | [{ tdesc; typ = TTtuple types; is_assignable; loc }] ->
@@ -487,7 +487,7 @@ let rec type_stmt env b_vars level = function
           b_vars, TSdeclare (t_assigned_s, t_values)  
      end
   | Ast.Sreturn (exps) ->
-     b_vars, TSreturn (check_expr_list env exps)
+     b_vars, TSreturn (type_expr_list env exps)
   | Ast.Sfor (init, cond, post, body) ->
      begin
        (* init statement*)
