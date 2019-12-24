@@ -7,6 +7,7 @@ open Lexing
 
 exception Syntax_error of Ast.loc * string
 exception Type_error of Ast.loc * string
+exception Optimiser_error of Ast.loc * string
 
 let red = "\027[31m"
 let yellow = "\027[33m"
@@ -22,6 +23,9 @@ let syntax_error loc msg =
 
 let type_error loc msg =
   raise (Type_error (loc, msg))
+
+let optimiser_error loc msg =
+  raise (Optimiser_error (loc, msg))
 
 let incr_level () = incr level
 let decr_level () = decr level
@@ -150,7 +154,7 @@ and string_of_type fmt = function
 let rec string_of_texpr fmt te =
   match te.tdesc with
   | TEint n ->
-     Format.fprintf fmt "%s" (Big_int.string_of_big_int n)
+     Format.fprintf fmt "%s" (Int64.to_string n)
   | TEstring str ->
      Format.fprintf fmt "%s" str
   | TEbool b ->
@@ -159,10 +163,10 @@ let rec string_of_texpr fmt te =
      Format.fprintf fmt "nil"
   | TEnew typ ->
      Format.fprintf fmt "new(%a)" string_of_type typ
-  | TEident id ->
-     Format.fprintf fmt "%s" id
+  | TEident tvar ->
+     Format.fprintf fmt "%s" tvar.id
   | TEselect (struct_, field) ->
-     Format.fprintf fmt "%a.%s" string_of_texpr struct_ field
+     Format.fprintf fmt "%a.%d" string_of_texpr struct_ field
   | TEcall (f, args) ->
      Format.fprintf fmt "%s()" f 
   | TEprint _ ->
@@ -172,6 +176,16 @@ let rec string_of_texpr fmt te =
   | TEbinop (op, l, r) ->
      Format.fprintf fmt "@[(%a %a@ %a)@]"
        string_of_texpr l string_of_binop op string_of_texpr r
+
+let size_of_type = function
+  | TTint | TTstring | TTbool | TTstruct _ | TTpointer _ ->
+     1
+  | TTunit ->
+     0
+  | TTtuple tl ->
+     List.length tl
+  | TTnil | TTuntyped ->
+     assert false
 
 let get_ident (e, loc)  =
   match e.desc, loc with
@@ -243,15 +257,17 @@ let multi_texpr_compatible_types ty_ref (te_act:Asg.texpr) f_msg =
 
 let rec scan_texpr env use_queue expr =
   match expr.tdesc with
-  | TEint _ | TEstring _ | TEbool _ | TEnil | TEnew _ | TEident "_" ->
+  | TEint _ | TEstring _ | TEbool _ | TEnil | TEnew _ ->
      env, use_queue
-  | TEident id ->
+  | TEident tvar when tvar.id = "_" ->
+     env, use_queue
+  | TEident tvar ->
      begin
        try
-         let occ, loc = Smap.find id env in
-         Smap.add id (occ + 1, loc) env, use_queue
+         let occ, loc = Smap.find tvar.id env in
+         Smap.add tvar.id (occ + 1, loc) env, use_queue
        with Not_found ->
-         env, id :: use_queue
+         env, tvar.id :: use_queue
      end
   | TEselect (str, _) ->
      scan_texpr env use_queue str

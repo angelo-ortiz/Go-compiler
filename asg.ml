@@ -12,15 +12,13 @@ type t_typ =
 
 type tvar = {
     id : string;          (* variable name *)
-    level : int;          (* depth *)
-    mutable offset: int;  (* offset w.r.t the base pointer *)
+    b_number : int;       (* block's number *)
     typ: t_typ;           (* type *)
     loc : Ast.loc;        (* location in code *)
   }
 
 module Smap = Map.Make(String)
-
-type env = t_typ Smap.t
+type 'a smap = 'a Smap.t
 
 type texpr = {
     tdesc : tdesc;         (* typed expression *)
@@ -30,22 +28,22 @@ type texpr = {
   }
            
 and tdesc =
-  | TEint of Big_int.big_int
+  | TEint of int64
   | TEstring of string
   | TEbool of bool
   | TEnil
   | TEnew of t_typ  (* the function new is simulated on the go *)
-  | TEident of string
-  | TEselect of texpr * string
+  | TEident of tvar
+  | TEselect of texpr * int
   | TEcall of string * texpr list
   | TEprint of texpr list
   | TEunop of Ast.unop * texpr
   | TEbinop of Ast.binop * texpr * texpr
 
 and tblock = {
-    vars : tvar Smap.t;  (* declared variables *)
+    vars : tvar smap;    (* declared variables *)
     stmts : tstmt list;  (* list of statements *)
-    level : int          (* depth *)
+    number : int;        (* block's number *)
   }
           
 and tstmt =
@@ -72,12 +70,12 @@ type decl_struct = {
                  
 type decl_fun = {
     formals: (string * t_typ) list;  (* list of (formal, type)*)
-    rtype: t_typ;                    (* return type *)
-    body: fblock;                    (* body *)
+    rtype : t_typ;                   (* return type *)
+    body : fblock;                   (* body *)
     loc : Ast.loc;                   (* declaration locus *)
   }
          
 type tfile = {
-    structs : decl_struct Smap.t;
-    functions : decl_fun Smap.t
+    structs : decl_struct smap;
+    functions : decl_fun smap;
   }

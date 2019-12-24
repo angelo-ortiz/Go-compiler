@@ -6,11 +6,17 @@ open Asg
  *** 1 -> tau
  *** 2+ -> list of tau 
 *)
+
+exception Found_field of int * t_typ
    
 let struct_env : Asg.decl_struct Smap.t ref = ref Smap.empty
 let func_env : Asg.decl_fun Smap.t ref = ref Smap.empty
 let import_fmt = ref false
 let used_fmt = ref false
+let block_number = ref (-1)
+
+let next_bnumber () =
+  incr block_number; !block_number
 
 let type_of_string loc = function
   | "int" ->
@@ -70,17 +76,17 @@ let type_of_binop = function
   | Ast.Beq | Ast.Bneq | Ast.Blt | Ast.Ble | Ast.Bgt | Ast.Bge | Ast.Band | Ast.Bor ->
      TTbool
   
-let new_var id level ?(offset=0) ?(loc=Utils.dummy_loc) typ =
-  { id; level; offset; typ; loc }
+let new_var id b_number ?(loc=Utils.dummy_loc) typ =
+  { id; b_number; typ; loc }
 
 (* unique variable `_` *)
 let underscore =
-  { id = "_"; level = 0; offset = 0; typ = TTuntyped; loc = Utils.dummy_loc }
+  { id = "_"; b_number = 0; typ = TTuntyped; loc = Utils.dummy_loc }
 
 (* unique expression `_` *)
 let under_texpr =
-  { tdesc = TEident "_"; typ = TTuntyped; is_assignable = true; loc = Utils.dummy_loc }
-  
+  { tdesc = TEident underscore; typ = TTuntyped; is_assignable = true; loc = Utils.dummy_loc }
+
 let rec type_expr (env:Asg.tvar Asg.Smap.t) (e:Ast.expr) =
   let tdesc, typ, is_assignable = compute_type env e in
   { tdesc; typ; is_assignable; loc = e.loc }
@@ -96,7 +102,7 @@ let rec type_expr (env:Asg.tvar Asg.Smap.t) (e:Ast.expr) =
 and compute_type env e =
   match e.desc with
   | Ast.Ecst (Cint n) ->
-     TEint n, TTint, false
+     TEint (Int64.of_string (Big_int.string_of_big_int n)), TTint, false
   | Ast.Ecst (Cstring s) ->
      TEstring s, TTstring, false
   | Ast.Ecst (Cbool b) ->
@@ -108,7 +114,8 @@ and compute_type env e =
   | Ast.Eident v ->
      begin
        try
-         TEident v, (let feats = Smap.find v env in feats.typ), true
+         let tvar = Smap.find v env in
+         TEident tvar, tvar.typ, true
        with Not_found ->
          Utils.type_error e.loc (Format.sprintf "undefined %s" v)
      end
@@ -117,14 +124,16 @@ and compute_type env e =
        let t_str = type_expr env str in
        match t_str.typ with
        | TTstruct s | TTpointer (TTstruct s) as t ->
-          begin
+          let { fields; loc = _ } = Smap.find s !struct_env in
+          let fd_offset, fd_type =
             try
-              let { fields; loc = _ } = Smap.find s !struct_env in
-              TEselect (t_str, fd), List.assoc fd fields, t_str.is_assignable
-            with Not_found ->
+              List.iteri
+                (fun i (fd', typ) -> if fd' = fd then raise (Found_field (i, typ))) fields;
               Utils.type_error fd_loc (Format.asprintf "%a.%s undefined (type %a has no field %s)"
-                                   Utils.string_of_expr str.desc fd Utils.string_of_type t fd)
-          end
+                                         Utils.string_of_expr str.desc fd Utils.string_of_type t fd)
+            with Found_field (ofs, typ) -> ofs, typ
+          in
+          TEselect (t_str, fd_offset), fd_type, t_str.is_assignable
        | TTint | TTstring | TTbool | TTunit | TTtuple _ | TTpointer _ as t ->
           Utils.type_error str.loc (Format.asprintf "%a.%s undefined (type %a has no field %s)"
                                 Utils.string_of_expr str.desc fd Utils.string_of_type t fd)
@@ -312,7 +321,7 @@ let update_env env var_map = function
 let expr_placeholder ?(typ=TTuntyped) = fun _ ->
   { tdesc = TEnil; typ; is_assignable = false; loc = Utils.dummy_loc }
      
-let rec type_shstmt env b_vars level = function
+let rec type_shstmt env b_vars b_number = function
   | Ast.Ieval e ->
      begin
        match e.desc with
@@ -387,20 +396,21 @@ let rec type_shstmt env b_vars level = function
                  "%s redeclared in this block\n\t previous declaration in characters %d-%d at line %d"
                  id fst_char last_char line)
           with Not_found ->
-            let n_var = new_var id level ~loc typ in
+            let n_var = new_var id b_number ~loc typ in
             update_var_map (Smap.add id n_var var_map) (n_var :: t_vars) (var_names, types)
      in
      let b_vars, t_assigned_s = update_var_map b_vars [] (vars, types) in
      b_vars, TSdeclare (t_assigned_s, t_values)
 
-let rec type_stmt env b_vars level = function
+let rec type_stmt env b_vars b_number = function
   | Ast.Snop ->
      b_vars, TSnop
   | Ast.Sexec shstmt ->
-     type_shstmt env b_vars level shstmt
+     type_shstmt env b_vars b_number shstmt
   | Ast.Sblock b ->
-     let vars, stmts = type_nested_stmt env b (level + 1) in 
-     b_vars, TSblock { vars; stmts; level }
+     let number = next_bnumber () in
+     let vars, stmts = type_block env b number in 
+     b_vars, TSblock { vars; stmts; number }
   | Ast.Sif (cond, bif, belse) ->
      (* condition *)
      let t_cond = type_expr env cond in
@@ -409,16 +419,18 @@ let rec type_stmt env b_vars level = function
          (Format.asprintf "non-bool %a (type %a) used as if condition"
             Utils.string_of_expr cond.desc Utils.string_of_type t_cond.typ);
      (* branch then *)
-     let if_vars, if_stmts = type_nested_stmt env bif (level + 1) in
+     let if_number = next_bnumber () in
+     let if_vars, if_stmts = type_block env bif if_number in
      (* branch else *)
-     let else_vars, else_stmts = type_nested_stmt env belse (level + 1) in
-     b_vars, TSif (t_cond, { vars = if_vars; stmts = if_stmts; level },
-                   { vars = else_vars; stmts = else_stmts; level })
+     let else_number = next_bnumber () in
+     let else_vars, else_stmts = type_block env belse else_number in
+     b_vars, TSif (t_cond, { vars = if_vars; stmts = if_stmts; number = if_number },
+                   { vars = else_vars; stmts = else_stmts; number = else_number })
   | Ast.Sinit (vars, ty, values) ->
      begin
        match values with
        | [] -> (* declaration *)
-          (* syntax error if not given *)
+          (* syntax error if unspecified *)
           let typ =
             match ty with | Some t -> type_of_ast_typ t | None -> assert false in
           let rec update_var_map (var_map:Asg.tvar Asg.Smap.t) t_vars = function
@@ -437,7 +449,7 @@ let rec type_stmt env b_vars level = function
                       "%s redeclared in this block\n\t previous declaration in characters %d-%d at line %d"
                       id fst_char last_char line)
                with Not_found ->
-                 let n_var = new_var id level ~loc typ in
+                 let n_var = new_var id b_number ~loc typ in
                  update_var_map (Smap.add id n_var var_map) (n_var :: t_vars) var_names
                  
           in
@@ -480,7 +492,7 @@ let rec type_stmt env b_vars level = function
                       "%s redeclared in this block\n\t previous declaration in characters %d-%d at line %d"
                       id fst_char last_char line)
                with Not_found ->
-                 let n_var = new_var id level ~loc typ in
+                 let n_var = new_var id b_number ~loc typ in
                  update_var_map (Smap.add id n_var var_map) (n_var :: t_vars) (var_names, types)
           in
           let b_vars, t_assigned_s = update_var_map b_vars [] (vars, types) in
@@ -491,13 +503,14 @@ let rec type_stmt env b_vars level = function
   | Ast.Sfor (init, cond, post, body) ->
      begin
        (* init statement*)
-       let outer_vars, t_init, env =
+       let outer_vars, t_init, env, outer_number =
          match init with
          | None ->
-            Smap.empty, TSnop, env 
+            Smap.empty, TSnop, env, b_number
          | Some st ->
-            let out_vars, t_init = type_shstmt env Smap.empty (level + 1) st in
-            out_vars, t_init, update_env env out_vars t_init
+            let outer_number = next_bnumber () in
+            let out_vars, t_init = type_shstmt env Smap.empty outer_number st in
+            out_vars, t_init, update_env env out_vars t_init, outer_number
        in
        (* condition *)
        let t_cond = type_expr env cond in
@@ -506,33 +519,33 @@ let rec type_stmt env b_vars level = function
            (Format.asprintf "non-bool %a (type %a) used as for condition"
               Utils.string_of_expr cond.desc Utils.string_of_type t_cond.typ);
        (* post statement & body *)
-       let for_level = if t_init = TSnop then level else level + 1 in
+       let for_number = next_bnumber () in
        let for_vars, for_stmts =
          match post with
          | None ->
-            type_nested_stmt env body (for_level + 1)
+            type_block env body for_number
          | Some st ->
-            type_nested_stmt env body ~ending_stmt:(Ast.Sexec st) (for_level + 1)
+            type_block env body ~ending_stmt:(Ast.Sexec st) for_number
        in
-       let for_stmt = TSfor (t_cond, { vars = for_vars; stmts = for_stmts; level = for_level }) in
+       let for_stmt = TSfor (t_cond, { vars = for_vars; stmts = for_stmts; number = for_number }) in
        b_vars,
-       if t_init = TSnop then for_stmt
-       else TSblock { vars = outer_vars; stmts = t_init :: for_stmts; level }
+       if outer_number = b_number then for_stmt
+       else TSblock { vars = outer_vars; stmts = t_init :: for_stmts; number = outer_number }
      end
     
-and type_nested_stmt env stmts ?ending_stmt level =
-  let rec loop env var_map stmts ending_stmt t_stmts level =
+and type_block env stmts ?ending_stmt number =
+  let rec loop env var_map stmts ending_stmt t_stmts number =
     match stmts, ending_stmt with
     | [], None ->
        var_map, List.rev t_stmts
     | [], Some st ->
-       loop env var_map [st] None t_stmts level
+       loop env var_map [st] None t_stmts number
     | st :: stmts, _ ->
-       let var_map, t_st = type_stmt env var_map level st in
+       let var_map, t_st = type_stmt env var_map number st in
        (* the 'global' environment is updated by the block *)
-       let env = update_env env var_map t_st in
-       loop env var_map stmts ending_stmt (t_st :: t_stmts) level
-  in loop env Smap.empty stmts ending_stmt [] level
+       let env = update_env env var_map t_st in (* TODO: non-optimal *)
+       loop env var_map stmts ending_stmt (t_st :: t_stmts) number
+  in loop env Smap.empty stmts ending_stmt [] number
 
 let rec type_vars_of_decl (vars, typ) typ_list msg =
   match vars with
@@ -602,12 +615,13 @@ let type_struct_fields (name, loc, fields) =
 
 let type_fun_body (name, _, _, _, _) =
   let func = Smap.find name !func_env in
+  let b_number = next_bnumber () in
   let env = List.fold_left
-              (fun env (id, t) -> Smap.add id (new_var id 0 t) env) Smap.empty func.formals in
+              (fun env (id, t) -> Smap.add id (new_var id b_number t) env) Smap.empty func.formals in
   let body = match func.body with Untyped b -> b | Typed _ -> assert false in
-  let vars, stmts = type_nested_stmt env body 1 in
+  let vars, stmts = type_block env body b_number in
   (* check return *)
-  let tbody = Typed { vars; stmts; level = 0 } in
+  let tbody = Typed { vars; stmts; number = b_number } in
   func_env := Smap.add name { func with body = tbody } !func_env
 
 let type_file file =

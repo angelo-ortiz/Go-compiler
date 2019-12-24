@@ -15,16 +15,14 @@ type t_typ =
 
 type tvar = {
     id : string;
-    level : int;
-    mutable offset: int;
+    b_number : int;
     typ: t_typ;
     loc : Ast.loc
   }
 
 module Smap : Map.S with type key = string
+type 'a smap = 'a Smap.t
              
-type env = t_typ Smap.t
-
 type texpr = {
     tdesc : tdesc;
     typ : t_typ;
@@ -33,22 +31,22 @@ type texpr = {
   }
            
 and tdesc =
-  | TEint of Big_int.big_int
+  | TEint of int64
   | TEstring of string
   | TEbool of bool
   | TEnil
   | TEnew of t_typ
-  | TEident of string
-  | TEselect of texpr * string
+  | TEident of tvar
+  | TEselect of texpr * int
   | TEcall of string * texpr list
   | TEprint of texpr list
   | TEunop of Ast.unop * texpr
   | TEbinop of Ast.binop * texpr * texpr
 
 and tblock = {
-    vars : tvar Smap.t;
+    vars : tvar smap;
     stmts : tstmt list;
-    level : int
+    number : int;
   }
           
 and tstmt =
@@ -60,7 +58,7 @@ and tstmt =
   | TSblock of tblock
   | TSif of texpr * tblock * tblock
   | TSassign of texpr list * texpr list
-  | TSdeclare of tvar list * texpr list
+  | TSdeclare of tvar list * texpr list (* string * Ast.loc instead of tvar??? *)
   | TSreturn of texpr list
   | TSfor of texpr * tblock
 
@@ -74,13 +72,13 @@ type decl_struct = {
   }
                  
 type decl_fun = {
-    formals: (string * t_typ) list;
-    rtype: t_typ;
-    body: fblock;
+    formals : (string * t_typ) list;
+    rtype : t_typ;
+    body : fblock;
     loc : Ast.loc;
   }
          
 type tfile = {
-    structs : decl_struct Smap.t;
-    functions : decl_fun Smap.t
+    structs : decl_struct smap;
+    functions : decl_fun smap;
   }
