@@ -9,7 +9,8 @@ val blue : string
 val invert : string
 val close : string
 val dummy_loc : Ast.loc
-
+val word_size : int
+  
 val syntax_error : Ast.loc -> string -> 'a
 val type_error : Ast.loc -> string -> 'a
 val optimiser_error : Ast.loc -> string -> 'a
@@ -28,7 +29,7 @@ val string_of_expr : Format.formatter -> Ast.desc -> unit
 val string_of_type_list : Format.formatter -> Asg.t_typ list -> unit
 val string_of_type : Format.formatter -> Asg.t_typ -> unit
 val string_of_texpr : Format.formatter -> Asg.texpr -> unit
-val size_of_type : Asg.t_typ -> int
+val length_of_type : Asg.t_typ -> int
 val get_ident : Ast.expr * Ast.loc -> Ast.ident
 val binop_expected_type : Ast.binop -> Asg.t_typ option
 val verify_operand_type : Ast.binop -> Ast.loc -> Ast.desc -> Asg.t_typ option * Asg.t_typ -> Asg.t_typ

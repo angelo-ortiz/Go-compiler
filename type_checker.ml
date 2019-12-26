@@ -326,7 +326,8 @@ let rec type_shstmt env b_vars b_number = function
      begin
        match e.desc with
        | Ecst _ | Eident _ | Eselect _ | Eunop _ | Ebinop _ ->
-          Utils.type_error e.loc (Format.asprintf "%a evaluated but not used" Utils.string_of_expr e.desc)
+          Utils.type_error e.loc (Format.asprintf "%a evaluated but not used"
+                                    Utils.string_of_expr e.desc)
        | Ecall (f, actuals) ->
           let t_call = type_expr env e in
           let actuals = match t_call.tdesc with | TEcall (_, act) -> act | _ -> assert false in
@@ -615,7 +616,8 @@ let type_struct_fields (name, loc, fields) =
 
 let type_fun_body (name, _, _, _, _) =
   let func = Smap.find name !func_env in
-  let b_number = next_bnumber () in
+  block_number := 0;
+  let b_number = 0 in
   let env = List.fold_left
               (fun env (id, t) -> Smap.add id (new_var id b_number t) env) Smap.empty func.formals in
   let body = match func.body with Untyped b -> b | Typed _ -> assert false in

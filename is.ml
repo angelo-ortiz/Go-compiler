@@ -1,10 +1,17 @@
-
 open Asg
 open Istree
 
-(* x86_64: 64b *)
-let word_size = 8
-
+let all_structs = ref Asg.Smap.empty
+   
+let rec size_of_type = function
+  | Asg.TTint | Asg.TTbool | Asg.TTstring | TTpointer _ ->
+     Utils.word_size
+  | Asg.TTstruct s ->
+     let str = Asg.Smap.find s !all_structs in
+     List.fold_left (fun size (_, ty) -> size + size_of_type ty) 0 str.fields
+  | Asg.TTnil | Asg.TTunit | Asg.TTuntyped | Asg.TTtuple _ ->
+     assert false
+     
 (* assert variable-name unicity*)
 let prepend_bnumber tvar =
   Format.sprintf "%d_%s" tvar.b_number tvar.id
@@ -105,22 +112,6 @@ let rec mk_not = function
      IEunop (Msetlei n, e)
   | IEunop (Msetgei n, e) ->
      IEunop (Msetli n, e)
-  | IEunop (Mjz, e) ->
-     IEunop (Mjnz, e)
-  | IEunop (Mjnz, e) ->
-     IEunop (Mjz, e)
-  | IEunop (Mjei n, e) ->
-     IEunop (Mjnei n, e)
-  | IEunop (Mjnei n, e) ->
-     IEunop (Mjei n, e)
-  | IEunop (Mjgi n, e) ->
-     IEunop (Mjlei n, e)
-  | IEunop (Mjgei n, e) ->
-     IEunop (Mjli n, e)
-  | IEunop (Mjli n, e) ->
-     IEunop (Mjgei n, e)
-  | IEunop (Mjlei n, e) ->
-     IEunop (Mjgi n, e)
   | IEbinop (Msete, l, r) ->
      IEbinop (Msetne, l, r)
   | IEbinop (Msetne, l, r) ->
@@ -133,18 +124,6 @@ let rec mk_not = function
      IEbinop (Msetle, l, r)
   | IEbinop (Msetge, l, r) ->
      IEbinop (Msetl, l, r) 
-  | IEbinop (Mje, l, r) ->
-     IEbinop (Mjne, l, r)
-  | IEbinop (Mjne, l, r) ->
-     IEbinop (Mje, l, r)
-  | IEbinop (Mjl, l, r) ->
-     IEbinop (Mjge, l, r)
-  | IEbinop (Mjle, l, r) ->
-     IEbinop (Mjg, l, r)
-  | IEbinop (Mjg, l, r) ->
-     IEbinop (Mjle, l, r)
-  | IEbinop (Mjge, l, r) ->
-     IEbinop (Mjl, l, r)
   | IEand (l, r) ->
      IEor (mk_not l, mk_not r)
   | IEor (l, r) ->
@@ -152,7 +131,7 @@ let rec mk_not = function
   | _ as e ->
      IEunop (Mnot, e)
 
-let mk_eq ?(cond=false) e1 e2 =
+let mk_eq e1 e2 =
   match e1, e2 with
   | IEbool b1, IEbool b2 ->
      IEbool (b1 = b2)
@@ -163,45 +142,35 @@ let mk_eq ?(cond=false) e1 e2 =
   | IEaccess v1, IEaccess v2 when v1 = v2 ->
      IEbool true
   | IEint n, e | e, IEint n ->
-     if cond then
-       if n = 0L then IEunop (Mjz, e)
-       else IEunop (Mjei n, e)
-     else IEunop (Msetei n, e)
+     IEunop (Msetei n, e)
   | _ ->
-     let op = if cond then Mje else Msete in
-     IEbinop (op, e1, e2)
+     IEbinop (Msete, e1, e2)
     
-let mk_lt ?(cond=false) e1 e2 =
+let mk_lt e1 e2 =
   match e1, e2 with
   | IEint n1, IEint n2 ->
      IEbool (n1 < n2)
   | IEaccess v1, IEaccess v2 when v1 = v2 ->
      IEbool false
   | IEint n, e ->
-     let op = if cond then Mjgi n else Msetgi n in
-     IEunop (op, e)
+     IEunop (Msetgi n, e)
   | e, IEint n ->
-     let op = if cond then Mjli n else Msetli n in
-     IEunop (op, e)
+     IEunop (Msetli n, e)
   | _ ->
-     let op = if cond then Mjl else Msetl in
-     IEbinop (op, e1, e2)
+     IEbinop (Msetl, e1, e2)
     
-let mk_le ?(cond=false) e1 e2 =
+let mk_le e1 e2 =
   match e1, e2 with
   | IEint n1, IEint n2 ->
      IEbool (n1 <= n2)
   | IEaccess v1, IEaccess v2 when v1 = v2 ->
      IEbool true
   | IEint n, e ->
-     let op = if cond then Mjgei n else Msetgei n in
-     IEunop (op, e)
+     IEunop (Msetgei n, e)
   | e, IEint n ->
-     let op = if cond then Mjlei n else Msetlei n in
-     IEunop (op, e)
+     IEunop (Msetlei n, e)
   | _ ->
-     let op = if cond then Mjle else Msetle in
-     IEbinop (op, e1, e2)
+     IEbinop (Msetle, e1, e2)
     
 let rec expr e =
   match e.tdesc with
@@ -214,11 +183,13 @@ let rec expr e =
   | TEnil ->
      IEnil
   | TEnew ty ->
-     IEnew ty
+     IEmalloc (size_of_type ty)
+  | TEident tvar when tvar.id = "_" ->
+     IEaccess "_"
   | TEident tvar ->
      IEaccess (prepend_bnumber tvar)
   | TEselect (str, n) ->
-     IEload (expr str, n * word_size)
+     IEload (expr str, n * Utils.word_size)
   | TEcall (f, actuals) ->
      IEcall (f, List.map expr actuals)
   | TEprint es ->
@@ -258,37 +229,6 @@ let rec expr e =
   | TEbinop (Ast.Bor, l, r) ->
      IEor (expr l, expr r)
 
-let rec cond_expr e =
-  match e.tdesc with
-  | TEbool b ->
-     IEbool b
-  | TEident tvar ->
-     IEunop (Mjnz, IEaccess (prepend_bnumber tvar))
-  | TEselect (str, n) ->
-     IEunop (Mjnz, IEload (expr str, n * word_size))
-  | TEcall (f, actuals) ->
-     IEunop (Mjnz, IEcall (f, List.map expr actuals))
-  | TEunop (Ast.Unot, e) ->
-     mk_not (cond_expr e)
-  | TEbinop (Ast.Beq, l, r) ->
-     mk_eq ~cond:true (expr l) (expr r)
-  | TEbinop (Ast.Bneq, l, r) ->
-     mk_not (mk_eq ~cond:true (expr l) (expr r))
-  | TEbinop (Ast.Blt, l, r) ->
-     mk_lt ~cond:true (expr l) (expr r)
-  | TEbinop (Ast.Ble, l, r) ->
-     mk_le ~cond:true (expr l) (expr r)
-  | TEbinop (Ast.Bgt, l, r) ->
-     mk_not (mk_le ~cond:true (expr l) (expr r))
-  | TEbinop (Ast.Bge, l, r) ->
-     mk_not (mk_lt ~cond:true (expr l) (expr r))
-  | TEbinop (Ast.Band, l, r) ->
-     IEand (expr l, expr r)
-  | TEbinop (Ast.Bor, l, r) ->
-     IEor (expr l, expr r)
-  | _ ->
-     assert false
-    
 let rec stmt l_vars l_stmts = function
   | TSnop ->
      l_vars, l_stmts
@@ -305,18 +245,20 @@ let rec stmt l_vars l_stmts = function
   | TSif (cond, bif, belse) ->
      let l_vars, b_if = block l_vars [] bif in
      let l_vars, b_else = block l_vars [] belse in
-     l_vars, ISif (cond_expr cond, List.rev b_if, List.rev b_else) :: l_stmts
+     l_vars, ISif (expr cond, List.rev b_if, List.rev b_else) :: l_stmts
   | TSassign (assigned_s, values) ->
      l_vars, ISassign (List.map expr assigned_s, List.map expr values) :: l_stmts
   | TSdeclare (vars, values) ->
      l_vars,
-     ISassign
-       (List.map (fun v -> IEaccess (prepend_bnumber v)) vars, List.map expr values) :: l_stmts
+     ISassign (
+         List.map (fun v -> IEaccess (if v.id = "_" then "_" else  prepend_bnumber v)) vars,
+         List.map expr values
+       ) :: l_stmts
   | TSreturn es ->
      l_vars, ISreturn (List.map expr es) :: l_stmts
   | TSfor (cond, body) ->
      let l_vars, b_for = block l_vars [] body in
-     l_vars, ISfor (cond_expr cond, b_for) :: l_stmts
+     l_vars, ISfor (expr cond, b_for) :: l_stmts
     
 and block l_vars l_stmts b =
   let l_vars = Smap.fold (fun id tvar vs -> (prepend_bnumber tvar) :: vs) b.vars l_vars in
@@ -326,10 +268,13 @@ and block l_vars l_stmts b =
   List.rev l_vars, List.rev l_stmts
   
 let function_ (f:Asg.decl_fun) =
+  (* local vars at block 0 cannot have the same name as a formal parameter *)
+  let formals = List.map (fun (id, _) -> "0_" ^ id) f.formals in
   let locals, body = block [] [] (match f.body with | Typed b -> b | Untyped _ -> assert false) in 
-  { formals = List.map fst f.formals; return = Utils.size_of_type f.rtype; locals; body }
+  { formals; result = Utils.length_of_type f.rtype; locals; body }
   
 let file (file:Asg.tfile) =
+  all_structs := file.structs;
   let structs = Smap.map (fun str -> List.length str.fields) file.structs in
   let functions = Smap.map function_ file.functions in
   { structs; functions }

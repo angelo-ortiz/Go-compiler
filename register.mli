@@ -5,3 +5,11 @@ val fresh : unit -> t
 
 module S : Set.S with type elt = t
 type set = S.t
+
+val rax : t (* division quotient *)
+val rdx : t (* division remainder *)
+val rdi : t (* new & println *)
+val rsp : t (* frame pointer *)
+val rbp : t (* base pointer *)
+val parameters : t list (* first 6 functions actual parameters *)
+val callee_saved : t list

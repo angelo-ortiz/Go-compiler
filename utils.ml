@@ -16,6 +16,7 @@ let invert = "\027[7m"
 let close = "\027[0m"
 let level = ref 0
 let dummy_loc = Lexing.dummy_pos, Lexing.dummy_pos
+let word_size = 8 (* x86_64: 64b *)
 let max_int = Big_int.power_int_positive_int 2 63
 
 let syntax_error loc msg =
@@ -177,7 +178,7 @@ let rec string_of_texpr fmt te =
      Format.fprintf fmt "@[(%a %a@ %a)@]"
        string_of_texpr l string_of_binop op string_of_texpr r
 
-let size_of_type = function
+let length_of_type = function
   | TTint | TTstring | TTbool | TTstruct _ | TTpointer _ ->
      1
   | TTunit ->
