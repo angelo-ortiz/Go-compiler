@@ -1,16 +1,35 @@
+
 open Asg
 open Istree
 
+exception Found_offset of int
+   
 let all_structs = ref Asg.Smap.empty
    
 let rec size_of_type = function
-  | Asg.TTint | Asg.TTbool | Asg.TTstring | TTpointer _ ->
+  | TTint | TTbool | TTstring | TTpointer _ ->
      Utils.word_size
-  | Asg.TTstruct s ->
-     let str = Asg.Smap.find s !all_structs in
+  | TTstruct s ->
+     let str = Smap.find s !all_structs in
      List.fold_left (fun size (_, ty) -> size + size_of_type ty) 0 str.fields
-  | Asg.TTnil | Asg.TTunit | Asg.TTuntyped | Asg.TTtuple _ ->
+  | TTnil | TTunit | TTuntyped | TTtuple _ ->
      assert false
+
+let struct_of_texpr = function
+  | Asg.TTstruct str ->
+     str
+  | _ ->
+     assert false
+    
+let field_offset str fd =
+  let str = Asg.Smap.find str !all_structs in
+  try
+    let _ = 
+      List.fold_left
+        (fun ofs (fd', ty) ->
+          if fd' = fd then raise (Found_offset ofs); ofs + size_of_type ty) 0 str.fields
+    in assert false
+  with Found_offset ofs -> ofs
      
 (* assert variable-name unicity*)
 let prepend_bnumber tvar =
@@ -188,8 +207,8 @@ let rec expr e =
      IEaccess "_"
   | TEident tvar ->
      IEaccess (prepend_bnumber tvar)
-  | TEselect (str, n) ->
-     IEload (expr str, n * Utils.word_size)
+  | TEselect (str, fd) ->
+     IEload (expr str, Utils.word_size * field_offset (struct_of_texpr str.typ) fd)
   | TEcall (f, actuals) ->
      IEcall (f, List.map expr actuals)
   | TEprint es ->
@@ -229,49 +248,64 @@ let rec expr e =
   | TEbinop (Ast.Bor, l, r) ->
      IEor (expr l, expr r)
 
-let rec stmt l_vars l_stmts = function
+let assign e =
+  match e.tdesc with
+  | TEident tvar ->
+     Avar (prepend_bnumber tvar)
+  | TEselect (str, fd) ->
+     Afield (expr str, Utils.word_size * field_offset (struct_of_texpr str.typ) fd)
+  | TEunop (Ast.Udref, e) ->
+     Adref (expr e)
+  | TEint _ | TEstring _ | TEbool _ | TEnil | TEnew _
+  | TEcall _ | TEprint _ | TEunop _ | TEbinop _ ->
+     assert false
+
+let rec stmt locals body = function
   | TSnop ->
-     l_vars, l_stmts
+     locals, body
   | TScall (f, actuals) ->
-     l_vars, IScall (f, List.map expr actuals) :: l_stmts
+     locals, IScall (f, List.map expr actuals) :: body
   | TSprint es ->
-     l_vars, ISprint (List.map expr es) :: l_stmts
+     locals, ISprint (List.map expr es) :: body
   | TSincr e ->
-     l_vars, ISexpr (IEunop (Minc, expr e)) :: l_stmts
+     locals, ISexpr (IEunop (Minc, expr e)) :: body
   | TSdecr e ->
-     l_vars, ISexpr (IEunop (Mdec, expr e)) :: l_stmts
+     locals, ISexpr (IEunop (Mdec, expr e)) :: body
   | TSblock b ->
-     block l_vars l_stmts b
+     block locals body b
   | TSif (cond, bif, belse) ->
-     let l_vars, b_if = block l_vars [] bif in
-     let l_vars, b_else = block l_vars [] belse in
-     l_vars, ISif (expr cond, List.rev b_if, List.rev b_else) :: l_stmts
+     let locals, b_if = block locals [] bif in
+     let locals, b_else = block locals [] belse in
+     locals, ISif (expr cond, List.rev b_if, List.rev b_else) :: body
   | TSassign (assigned_s, values) ->
-     l_vars, ISassign (List.map expr assigned_s, List.map expr values) :: l_stmts
+     locals, ISassign (List.map assign assigned_s, List.map expr values) :: body
   | TSdeclare (vars, values) ->
-     l_vars,
-     ISassign (
-         List.map (fun v -> IEaccess (if v.id = "_" then "_" else  prepend_bnumber v)) vars,
-         List.map expr values
-       ) :: l_stmts
+     (* Variable nitialisations are done at frame allocation *)
+     if values = [] then locals, body
+     else
+       locals,
+       ISassign (
+           List.map (fun v -> Avar (if v.id = "_" then "_" else  prepend_bnumber v)) vars,
+           List.map expr values
+         ) :: body
   | TSreturn es ->
-     l_vars, ISreturn (List.map expr es) :: l_stmts
-  | TSfor (cond, body) ->
-     let l_vars, b_for = block l_vars [] body in
-     l_vars, ISfor (expr cond, b_for) :: l_stmts
+     locals, ISreturn (List.map expr es) :: body
+  | TSfor (cond, bfor) ->
+     let locals, b_for = block locals [] bfor in
+     locals, ISfor (expr cond, List.rev b_for) :: body
     
-and block l_vars l_stmts b =
-  let l_vars = Smap.fold (fun id tvar vs -> (prepend_bnumber tvar) :: vs) b.vars l_vars in
-  let l_vars, l_stmts =
-    List.fold_left (fun (l_vs, l_sts) st -> stmt l_vs l_sts st) (l_vars, l_stmts) b.stmts
+and block locals body b =
+  let locals = Smap.fold (fun id tvar vs -> (prepend_bnumber tvar) :: vs) b.vars locals in
+  let locals, body =
+    List.fold_left (fun (vs, st_s) st -> stmt vs st_s st) (locals, body) b.stmts
   in
-  List.rev l_vars, List.rev l_stmts
+  locals, body
   
 let function_ (f:Asg.decl_fun) =
   (* local vars at block 0 cannot have the same name as a formal parameter *)
   let formals = List.map (fun (id, _) -> "0_" ^ id) f.formals in
   let locals, body = block [] [] (match f.body with | Typed b -> b | Untyped _ -> assert false) in 
-  { formals; result = Utils.length_of_type f.rtype; locals; body }
+  { formals; result = Utils.length_of_type f.rtype; locals = List.rev locals; body = List.rev body }
   
 let file (file:Asg.tfile) =
   all_structs := file.structs;

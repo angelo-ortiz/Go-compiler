@@ -8,8 +8,10 @@ type instr =
   | Eint of int64 * register * label
   | Estring of string * register * label (* TODO: cf rtltree *)
   | Ebool of bool * register * label
+  | Elea of register * register * label (* src | dst *)
   | Eload of register * int * register * label (* src | offset | dst *)
-  | Estore of register * register * int * label (* src | dst | offset *)
+  | Estore_field of register * register * int * label (* src | dst | offset *)
+  | Estore_dref of register * register * label (* src | dst *)
   | Ecall of int * string * int * label (* len(result) | # args in regs *)
   | Emunop of Istree.munop * register * label
   | Embinop of Istree.mbinop * register * register * label

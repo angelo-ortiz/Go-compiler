@@ -4,8 +4,11 @@ open Rtltree
 
 let graph = ref Label.M.empty
 let locals = ref (Hashtbl.create 32)
-let result_number = ref []
+let number_formals_results = ref []
 
+let listify =
+  fun x -> [x]
+                           
 let multi_fresh_list l =
   List.map (fun _ -> Register.fresh ()) l
   
@@ -53,49 +56,64 @@ let branch_of_binop = function
   | _ ->
      assert false
 
-let rec expr destr e destl =
+let rec expr destrs e destl =
   match e with
   | IEint n ->
-     generate (Eint (n, destr, destl))
+     generate (Eint (n, List.hd destrs, destl))
   | IEstring s ->
-     generate (Estring (s, destr, destl))
+     generate (Estring (s, List.hd destrs, destl))
   | IEbool b ->
-     generate (Ebool (b, destr, destl))
+     generate (Ebool (b, List.hd destrs, destl))
   | IEnil ->
-    generate (Eint (0L, destr, destl))
+    generate (Eint (0L, List.hd destrs, destl))
   | IEmalloc n ->
-     generate (Emalloc (destr, n, destl))
+     generate (Emalloc (List.hd destrs, n, destl))
   | IEaccess v ->
      let rx = Hashtbl.find !locals v in
-     generate (Embinop (Mmov, rx, destr, destl))
+     generate (Embinop (Mmov, rx, List.hd destrs, destl))
   | IEload (str, n) ->
      let rx = Register.fresh () in
-     expr rx str (
-         generate (Eload (rx, n, destr, destl))
+     expr [rx] str (
+         generate (Eload (rx, n, List.hd destrs, destl))
        )
   | IEcall (f, actuals) ->
-     let r_args = multi_fresh_list actuals in
-     let r_res = multi_fresh_int (List.assoc f !result_number) in
-     let lab = generate (Ecall (r_res, f, r_args, destl)) in
-     List.fold_right2 expr r_args actuals lab
-  | IEprint es ->
-     let regs = multi_fresh_list es in
-     let lab = generate (Eprint (regs, destl)) in (* TODO: reg list -> reg *)
-     List.fold_right2 expr regs es lab
-  | IEunop (op, e) ->
-     expr destr e (
-         generate (Emunop (op, destr, destl))
+     let n_formals, _ = List.assoc f !number_formals_results in
+     let r_args = multi_fresh_int n_formals in
+     let lab = generate (Ecall (destrs, f, r_args, destl)) in
+     if List.length actuals < n_formals then (* actuals is a single function call *)
+      expr r_args (List.hd actuals) lab
+     else (* one actual parameter per formal one *)
+       List.fold_right2 expr (List.map listify r_args) actuals lab
+  | IEprint es -> (* destrs are not used *)
+     assert false (* TODO *)
+     (* let regs = multi_fresh_list es in
+      * let lab = generate (Eprint (regs, destl)) in (\* TODO: reg list -> reg *\)
+      * List.fold_right2 expr regs es lab *)
+  | IEunop (Maddr, e) ->
+     let tmp = Register.fresh () in
+     expr [tmp] e (
+         generate (Elea (tmp, List.hd destrs, destl))
+       )
+  | IEunop (op, e) -> (* Mdref can be done with one register *)
+     expr destrs e (
+         generate (Emunop (op, List.hd destrs, destl))
        )
   | IEbinop (op, e1, e2) ->
-     let rx = Register.fresh () in
-     expr destr e1 (
-         expr rx e2 (
-             generate (Embinop (op, rx, destr, destl))
+     let tmp = Register.fresh () in
+     expr destrs e1 (
+         expr [tmp] e2 (
+             generate (Embinop (op, tmp, List.hd destrs, destl))
        ))
-  | IEand  _ | IEor _ ->
-     assert false
+  | IEand (e1, e2) ->
+     let true_l = expr destrs e2 destl  in
+     let false_l = generate (Ebool (false, List.hd destrs, destl)) in
+     condition e1 true_l false_l
+  | IEor (e1, e2) ->
+     let true_l = generate (Ebool (true, List.hd destrs, destl))  in
+     let false_l = expr destrs e2 destl in
+     condition e1 true_l false_l
 
-let rec condition e true_l false_l =
+and condition e true_l false_l =
   match e with
   | IEbool b ->
      generate (Egoto (if b then true_l else false_l))
@@ -105,7 +123,7 @@ let rec condition e true_l false_l =
      condition e1 true_l (condition e2 true_l false_l)
   | IEunop (Msetei n, e) -> (* <> n is more likely than = n *)
      let tmp = Register.fresh () in
-     expr tmp e (
+     expr [tmp] e (
          generate (
              let op = if n = 0L then Mjnz else Mjnei n in
              Emubranch (op, tmp, false_l, true_l)
@@ -113,7 +131,7 @@ let rec condition e true_l false_l =
        )
   | IEunop (Msetnei n, e) ->
      let tmp = Register.fresh () in
-     expr tmp e (
+     expr [tmp] e (
          generate (
              let op = if n = 0L then Mjnz else Mjnei n in
              Emubranch (op, tmp, true_l, false_l)
@@ -121,51 +139,70 @@ let rec condition e true_l false_l =
        )
   | IEunop (Msetgi n | Msetgei n | Msetli n | Msetlei n as op, e) ->
      let tmp = Register.fresh () in
-     expr tmp e (
+     expr [tmp] e (
          generate (Emubranch (branch_of_unop op, tmp, true_l, false_l))
        )
-  | IEbinop (op, e1, e2) ->
+  | IEunop (Mnot, e) ->
+     condition e false_l true_l
+  | IEbinop (Msete | Msetne | Msetg | Msetge | Msetl | Msetle as op, e1, e2) ->
      let tmp1 = Register.fresh () in
      let tmp2 = Register.fresh () in
-     expr tmp1 e1 (
-         expr tmp2 e2 (
+     expr [tmp1] e1 (
+         expr [tmp2] e2 (
              generate (Embbranch (branch_of_binop op, tmp2, tmp1, true_l, false_l))
        ))
-  | _ ->
-     assert false
+  | e ->
+     let tmp = Register.fresh () in
+     expr [tmp] e (
+         generate (Emubranch (Mjz, tmp, false_l, true_l))
+       )
 
+let assign srcr e destl =
+  match e with
+  | Avar v ->
+     let dstr = Hashtbl.find !locals v in
+     generate (Embinop (Mmov, srcr, dstr, destl))
+  | Afield (str, n) ->
+     let dstr = Register.fresh () in
+     expr [dstr] str (
+         generate (Estore_field (srcr, dstr, n, destl))
+       )
+  | Adref e ->
+     let dstr = Register.fresh () in
+     expr [dstr] e (
+         generate (Estore_dref (srcr, dstr, destl))
+       )
+     
 let rec stmt retrs s exitl destl =
   match s with
   | ISexpr e -> (* incr and decr only *)
      let tmp = Register.fresh () in
-     expr tmp e destl
+     expr [tmp] e destl
   | IScall (f, actuals) ->
-     (* tmp is actually not used *)
-     let tmp = Register.fresh () in
-     expr tmp (IEcall (f, actuals)) destl
+     let _, n_results = List.assoc f !number_formals_results in
+     let destrs = multi_fresh_int n_results in
+     expr destrs (IEcall (f, actuals)) destl
   | ISprint es ->
-     (* tmp is actually not used *)
-     let tmp = Register.fresh () in
-     expr tmp (IEprint es) destl
-  | ISblock b ->
-     block retrs b exitl destl
-  | ISif (e, s1, s2) ->
+     expr [] (IEprint es) destl
+  | ISif (e, bif, belse) ->
      condition e
-       (block retrs s1 exitl destl)
-       (block retrs s2 exitl destl)
+       (block retrs bif exitl destl)
+       (block retrs belse exitl destl)
+  | ISassign (vars, [IEcall (f, actuals) as e]) ->
+     let srcrs = multi_fresh_list vars in
+     let l = List.fold_right2 assign srcrs vars destl in
+     expr srcrs e l
   | ISassign (vars, values) ->
-     (* TODO: underscore? diff btw pointer, struct-field, var?*)
-     
-     (* let r_args = multi_fresh_list actuals in
-      * let r_res = multi_fresh (List.assoc f !functions) in
-      * let lab = generate (Ecall (r_res, f, r_args, destl)) in
-      * List.fold_right2 expr r_args actuals lab *)
-     assert false
+     let srcrs = multi_fresh_list vars in
+     let l = List.fold_right2 assign srcrs vars destl in
+     List.fold_right2 expr (List.map listify srcrs) values l
+  | ISreturn [IEcall (f, actuals) as e] ->
+     expr retrs e exitl
   | ISreturn es ->
-     List.fold_right2 expr retrs es exitl
-  | ISfor (e, b) ->
+     List.fold_right2 expr (List.map listify retrs) es exitl
+  | ISfor (e, bfor) ->
      let l = Label.fresh () in
-     let entry = condition e (stmt retrs s exitl l) destl in
+     let entry = condition e (block retrs bfor exitl l) destl in
      graph := Label.M.add l (Egoto entry) !graph;
      entry
 
@@ -193,8 +230,8 @@ let funct (f:Istree.idecl_fun) =
   
 let file (f:Istree.ifile) =
   let add_retrs f (decl:Istree.idecl_fun) acc =
-    (f, decl.result) :: acc
+    (f, (List.length decl.formals, decl.result)) :: acc
   in
-  result_number := Asg.Smap.fold add_retrs f.functions []; 
+  number_formals_results := Asg.Smap.fold add_retrs f.functions []; 
   let functions = Asg.Smap.map funct f.functions in
   { structs = f.structs; functions }

@@ -167,7 +167,7 @@ let rec string_of_texpr fmt te =
   | TEident tvar ->
      Format.fprintf fmt "%s" tvar.id
   | TEselect (struct_, field) ->
-     Format.fprintf fmt "%a.%d" string_of_texpr struct_ field
+     Format.fprintf fmt "%a.%s" string_of_texpr struct_ field
   | TEcall (f, args) ->
      Format.fprintf fmt "%s()" f 
   | TEprint _ ->

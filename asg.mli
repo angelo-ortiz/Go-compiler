@@ -37,7 +37,7 @@ and tdesc =
   | TEnil
   | TEnew of t_typ
   | TEident of tvar
-  | TEselect of texpr * int
+  | TEselect of texpr * string
   | TEcall of string * texpr list
   | TEprint of texpr list
   | TEunop of Ast.unop * texpr
@@ -58,7 +58,7 @@ and tstmt =
   | TSblock of tblock
   | TSif of texpr * tblock * tblock
   | TSassign of texpr list * texpr list
-  | TSdeclare of tvar list * texpr list (* string * Ast.loc instead of tvar??? *)
+  | TSdeclare of tvar list * texpr list
   | TSreturn of texpr list
   | TSfor of texpr * tblock
 

@@ -7,8 +7,6 @@ open Asg
  *** 2+ -> list of tau 
 *)
 
-exception Found_field of int * t_typ
-   
 let struct_env : Asg.decl_struct Smap.t ref = ref Smap.empty
 let func_env : Asg.decl_fun Smap.t ref = ref Smap.empty
 let import_fmt = ref false
@@ -125,15 +123,13 @@ and compute_type env e =
        match t_str.typ with
        | TTstruct s | TTpointer (TTstruct s) as t ->
           let { fields; loc = _ } = Smap.find s !struct_env in
-          let fd_offset, fd_type =
-            try
-              List.iteri
-                (fun i (fd', typ) -> if fd' = fd then raise (Found_field (i, typ))) fields;
+          let fd_type =
+            try List.assoc fd fields
+            with Not_found ->
               Utils.type_error fd_loc (Format.asprintf "%a.%s undefined (type %a has no field %s)"
                                          Utils.string_of_expr str.desc fd Utils.string_of_type t fd)
-            with Found_field (ofs, typ) -> ofs, typ
           in
-          TEselect (t_str, fd_offset), fd_type, t_str.is_assignable
+          TEselect (t_str, fd), fd_type, t_str.is_assignable
        | TTint | TTstring | TTbool | TTunit | TTtuple _ | TTpointer _ as t ->
           Utils.type_error str.loc (Format.asprintf "%a.%s undefined (type %a has no field %s)"
                                 Utils.string_of_expr str.desc fd Utils.string_of_type t fd)

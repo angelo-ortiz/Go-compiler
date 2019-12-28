@@ -34,7 +34,7 @@ and tdesc =
   | TEnil
   | TEnew of t_typ  (* the function new is simulated on the go *)
   | TEident of tvar
-  | TEselect of texpr * int
+  | TEselect of texpr * string
   | TEcall of string * texpr list
   | TEprint of texpr list
   | TEunop of Ast.unop * texpr

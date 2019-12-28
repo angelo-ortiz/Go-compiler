@@ -10,3 +10,7 @@ let fresh () =
 module M = Map.Make(String)
 
 type 'a map = 'a M.t
+
+module S = Set.Make(String)
+
+type set = S.t

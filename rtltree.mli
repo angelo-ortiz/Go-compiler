@@ -10,14 +10,16 @@ type mubranch =
 
 type mbbranch =
   | Mje | Mjne | Mjg | Mjge| Mjl | Mjle
-           
+
 type instr =
   | Eint of int64 * register * label
   | Estring of string * register * label (* TODO *)
   | Ebool of bool * register * label
   | Emalloc of register * int * label
+  | Elea of register * register * label (* src | dst *)
   | Eload of register * int * register * label (* src | offset | dst *)
-  | Estore of register * register * int * label (* src | dst | offset *)
+  | Estore_field of register * register * int * label (* src | dst | offset *)
+  | Estore_dref of register * register * label (* src | dst *)
   | Ecall of register list * string * register list * label (* result | name | args *)
   | Eprint of register * label (* expressions *)
   | Emunop of Istree.munop * register * label

@@ -27,8 +27,8 @@ let move src dst l =
 let push_param r l =
   generate (Epush_param (r, l))
 
-let get_param r ofs l = (* TODO: check this function!!! *)
-  generate (Eload (Register.rbp, ofs, r, l))
+let get_param r ofs l =
+  generate (Eget_param (ofs, r, l))
 
 (* Functions' return values convention: first result, if any, in %rax and
    the remaining ones on the stack *)
@@ -52,10 +52,14 @@ let instr = function
      Estring (s, r, l)
   | Rtltree.Ebool (b, r, l) ->
      Ebool (b, r, l)
+  | Rtltree.Elea (src, dst, l) ->
+     Elea (src, dst, l)
   | Rtltree.Eload (src, ofs, dst, l) ->
      Eload (src, ofs, dst, l)
-  | Rtltree.Estore (src, dst, ofs, l) ->
-     Estore (src, dst, ofs, l)
+  | Rtltree.Estore_field (src, dst, ofs, l) ->
+     Estore_field (src, dst, ofs, l)
+  | Rtltree.Estore_dref (src, dst, l) ->
+     Estore_dref (src, dst, l)
   | Rtltree.Emubranch (op, r, true_l, false_l) ->
      Emubranch (op, r, true_l, false_l)
   | Rtltree.Embbranch (op, r_arg, l_arg, true_l, false_l) ->
@@ -94,15 +98,15 @@ let instr = function
      Eint (Int64.of_int n, Register.rdi, generate (
      Ecall (1, "malloc", 1, generate (
      Embinop (Mmov, Register.rax, r, l)))))
-  | Rtltree.Ecall (rs, f, actuals, l) ->
+  | Rtltree.Ecall (res, f, actuals, l) ->
      let act_param, stack = assoc_arguments actuals in
      let n = List.length act_param in
      let l = pop (Utils.word_size * List.length stack) l in
-     let l = generate (Ecall (List.length rs, f, n, move_return l rs)) in
+     let l = generate (Ecall (List.length res, f, n, move_return l res)) in
      let l = List.fold_right (fun r l -> push_param r l) stack l in
      let l = List.fold_right (fun (a, r) l -> move a r l) act_param l in
      Egoto l
-  | Rtltree.Eprint (r, destl) ->
+  | Rtltree.Eprint (r, destl) -> (* TODO: cf rtl *)
      Embinop (Mmov, r, Register.rdi, generate (
      Ecall (0, "puts", 1, destl)))
 
