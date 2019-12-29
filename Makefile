@@ -1,4 +1,4 @@
-CMO=asg.cmo utils.cmo lexer.cmo parser.cmo type_checker.cmo main.cmo #interp.cmo
+CMO=asg.cmo utils.cmo lexer.cmo parser.cmo type_checker.cmo is.cmo rtl.cmo ertl.cmo main.cmo
 GENERATED=lexer.ml parser.ml parser.mli
 BIN=pgoc
 TEST=./test.sh
@@ -39,7 +39,11 @@ clean:
 	rm -f *.cm[io] *.o *~ $(BIN) $(GENERATED) parser.automaton
 
 parser.ml: ast.cmi utils.cmi
-
+ltl.cmo: colouring.cmo
+colouring.cmo: intf_graph.cmo
+intf_graph.cmo: liveness.cmo
+livenesss.cmo: register.cmi label.cmi
+	
 #type_checker.ml: asg.cmi
 
 .depend depend: $(GENERATED)

@@ -38,3 +38,4 @@ val multi_texpr_compatible_types :  Asg.t_typ -> Asg.texpr -> string -> Asg.texp
 val check_fun_return : Asg.decl_fun Asg.Smap.t -> unit
 val check_recursive_struct : Asg.decl_struct Asg.Smap.t -> unit
 val check_fun_main : (string * Ast.loc * Ast.vars list * Ast.typ list * Ast.block) list -> unit
+val prefix : int -> 'a list -> 'a list

@@ -436,3 +436,14 @@ let check_fun_main functions =
     type_error dummy_loc "function main is undeclared in the main package"
   with Found_main -> ()
 
+let prefix n l =
+  let rec loop n acc l =
+    if n = 0 then List.rev acc
+    else
+      match l with
+      | [] ->
+         assert false
+      | x :: l ->
+         loop (n-1) (x :: acc) l
+  in
+  loop n [] l
