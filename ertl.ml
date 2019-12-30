@@ -24,6 +24,9 @@ let assoc_arguments args =
 let move src dst l =
   generate (Embinop (Mmov, src, dst, l))
 
+let pop_param l r =
+  generate (Epop_param (r, l))
+
 let push_param r l =
   generate (Epush_param (r, l))
 
@@ -32,14 +35,23 @@ let get_param r ofs l =
 
 (* Functions' return values convention: first result, if any, in %rax and
    the remaining ones on the stack *)
-let move_return l = function
+let move_return_call l = function
   | [] ->
      l
   | [r] ->
      move Register.rax r l
   | r :: retrs ->
+     let l = List.fold_left pop_param l retrs in
+     move Register.rax r l
+
+let move_return_def l = function
+  | [] ->
+     l
+  | [r] ->
+     move r Register.rax l
+  | r :: retrs ->
      let l = List.fold_right push_param retrs l in
-     move rax r l
+     move r Register.rax l
 
 let pop n l =
   if n = 0 then l
@@ -102,7 +114,7 @@ let instr = function
      let act_param, stack = assoc_arguments actuals in
      let n = List.length act_param in
      let l = pop (Utils.word_size * List.length stack) l in
-     let l = generate (Ecall (List.length res, f, n, move_return l res)) in
+     let l = generate (Ecall (List.length res, f, n, move_return_call l res)) in
      let l = List.fold_right (fun r l -> push_param r l) stack l in
      let l = List.fold_right (fun (a, r) l -> move a r l) act_param l in
      Egoto l
@@ -123,7 +135,7 @@ let fun_entry saved formals entry =
 let fun_exit saved retrs exitl =
   let l = generate (Efree_frame (generate Ereturn)) in
   let l = List.fold_right (fun (s, r) l -> move s r l) saved l in
-  let l = move_return l retrs in
+  let l = move_return_def l retrs in
   graph := Label.M.add exitl (Egoto l) !graph
   
 let funct (f:Rtltree.decl_fun) =

@@ -1,4 +1,5 @@
-CMO=asg.cmo utils.cmo lexer.cmo parser.cmo type_checker.cmo is.cmo rtl.cmo ertl.cmo main.cmo
+#CMO=asg.cmo utils.cmo lexer.cmo parser.cmo type_checker.cmo is.cmo rtl.cmo ertl.cmo main.cmo
+CMO=asg.cmo utils.cmo label.cmo register.cmo lexer.cmo parser.cmo type_checker.cmo is.cmo rtl.cmo ertl.cmo liveness.cmo interference.cmo colouring.cmo ltl.cmo main.cmo
 GENERATED=lexer.ml parser.ml parser.mli
 BIN=pgoc
 TEST=./test.sh
@@ -39,11 +40,23 @@ clean:
 	rm -f *.cm[io] *.o *~ $(BIN) $(GENERATED) parser.automaton
 
 parser.ml: ast.cmi utils.cmi
+
 ltl.cmo: colouring.cmo
-colouring.cmo: intf_graph.cmo
-intf_graph.cmo: liveness.cmo
+
+colouring.cmo: interference.cmo
+
+interference.cmo: liveness.cmo
+
 livenesss.cmo: register.cmi label.cmi
-	
+
+is.cmo: label.cmi register.cmi
+
+label.cmi: label.ml
+	ocamlc $(FLAGS) -c $<
+
+register.cmi: register.ml
+	ocamlc $(FLAGS) -c $<
+
 #type_checker.ml: asg.cmi
 
 .depend depend: $(GENERATED)

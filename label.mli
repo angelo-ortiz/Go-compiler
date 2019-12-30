@@ -8,3 +8,5 @@ type 'a map = 'a M.t
 
 module S : Set.S with type elt = t
 type set = S.t
+
+val string_of_label : Format.formatter -> t -> unit

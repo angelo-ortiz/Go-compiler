@@ -14,3 +14,6 @@ type 'a map = 'a M.t
 module S = Set.Make(String)
 
 type set = S.t
+
+let string_of_label fmt l =
+  Format.fprintf fmt "%s" l

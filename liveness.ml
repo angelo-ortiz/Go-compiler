@@ -13,7 +13,8 @@ type info = {
 
 let kildall g =
   let def_use = function
-    | Eint (_, r, _) | Estring (_, r, _) | Ebool (_, r, _) | Eget_param (_, r, _) ->
+    | Eint (_, r, _) | Estring (_, r, _) | Ebool (_, r, _)
+    | Eget_param (_, r, _) | Epop_param (r, _) ->
        Register.S.singleton r, Register.S.empty
     | Elea (src, dst, _) | Eload (src, _, dst, _) ->
        Register.S.singleton dst, Register.S.singleton src
@@ -47,7 +48,8 @@ let kildall g =
     | Eint (_, _, l) | Estring (_, _, l) | Ebool (_, _, l) | Elea (_, _, l)
     | Eload (_, _, _, l) | Estore_field (_, _, _, l) | Estore_dref (_, _, l)
     | Ecall (_, _, _, l) | Emunop (_, _, l) | Embinop (_, _, _, l) | Egoto l
-    | Ealloc_frame l | Efree_frame l | Eget_param (_, _, l) | Epush_param (_, l) ->
+    | Ealloc_frame l | Efree_frame l | Eget_param (_, _, l) | Epop_param (_, l)
+    | Epush_param (_, l) ->
        Label.S.singleton l
     | Emubranch (_, _, l1, l2) | Embbranch (_, _, _, l1, l2) ->
        Label.S.add l1 (Label.S.singleton l2)

@@ -8,7 +8,7 @@ open Utils
 let usage = "usage: pgoc [options] file.go"
 
 let parse_only = ref false
-let type_only = ref true (* false *)
+let type_only = ref false
 
 let spec =
   [ "--parse-only", Arg.Set parse_only, " stop after parsing";
@@ -29,6 +29,8 @@ let report loc =
   let line, fst_char, last_char = Utils.position_of_loc loc in
   Format.eprintf "File \"%s\", line %d, characters %d-%d:\n" file line fst_char last_char
 
+let () = Printexc.record_backtrace true
+  
 let () =
   let ch = open_in file in
   let lb = Lexing.from_channel ch in
@@ -36,8 +38,12 @@ let () =
     let ast_file = Parser.file Lexer.next_token lb in
     close_in ch;
     if !parse_only then exit 0;
-    let type_file = Type_checker.type_file ast_file in ();
+    let type_file = Type_checker.type_file ast_file in
     if !type_only then exit 0;
+    let programme = Is.file type_file in
+    let programme = Rtl.file programme in
+    let programme = Ertl.file programme in
+    Ltl.file programme
   with
   | Lexer.Lexing_error s ->
      report (lexeme_start_p lb, lexeme_end_p lb);
@@ -57,6 +63,9 @@ let () =
      Format.eprintf "%stype error%s: %s@." Utils.red Utils.close msg;
      exit 1
   | e ->
+     let msg = Printexc.to_string e
+     and stack = Printexc.get_backtrace () in
+     Printf.eprintf "there was an error: %s%s\n" msg stack;
      Format.eprintf "%sunrecognised error%s: %s%s%s@."
        Utils.red Utils.close Utils.blue (Printexc.to_string e) Utils.close;
      exit 2

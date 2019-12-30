@@ -22,6 +22,7 @@ type instr =
   | Efree_frame of label
   | Eget_param of int * register * label
   | Epush_param of register * label
+  | Epop_param of register * label
   | Ereturn
 
 type decl_struct = int

@@ -1,5 +1,5 @@
 
-open Intf_graph
+open Interference
 
 type colour =
   | Spilled of int
@@ -11,10 +11,10 @@ module IntSet = Set.Make( struct let compare = Pervasives.compare type t = int e
 
 exception Bad_pref_arc
 exception Good_pref_arc of Register.t * Register.t
-exception Found_node of Register.t * Intf_graph.arcs
+exception Found_node of Register.t * Interference.arcs
 exception Found_colour of int
         
-let alloc_registers k mach_regs (g:Intf_graph.graph) =
+let alloc_registers k mach_regs g =
 
   let stack = Stack.create () in
   let spilled_set = ref Register.S.empty
@@ -98,7 +98,7 @@ let alloc_registers k mach_regs (g:Intf_graph.graph) =
       let v1_neighs = (Register.M.find v2 g).intfs in
       Register.S.iter (
           fun w ->
-          if (is_machine_register w <> v2_is_mach_reg || Intf_graph.degree_of w g >= k)
+          if (is_machine_register w <> v2_is_mach_reg || Interference.degree_of w g >= k)
              && not (Register.S.mem w v2_neighs)
           then raise Bad_pref_arc
         ) v1_neighs
@@ -148,7 +148,7 @@ let alloc_registers k mach_regs (g:Intf_graph.graph) =
       george_criterion g;
       freeze c g
     with Good_pref_arc (v1, v2) ->
-      let g = Intf_graph.merge_nodes v1 v2 g in
+      let g = Interference.merge_nodes v1 v2 g in
       let c = simplify c g in
       Register.M.add v1 (Register.M.find v2 c) c
     
@@ -156,7 +156,7 @@ let alloc_registers k mach_regs (g:Intf_graph.graph) =
     try
       Register.M.iter (
           fun v arcs ->
-          if Intf_graph.degree_of v g < k then raise (Found_node (v, arcs))
+          if Interference.degree_of v g < k then raise (Found_node (v, arcs))
         ) g;
       spill c g
     with Found_node (v, arcs) ->
@@ -180,7 +180,7 @@ let alloc_registers k mach_regs (g:Intf_graph.graph) =
   and select c g v =
     let arcs = Register.M.find v g in
     Stack.push (v, arcs) stack;
-    let g = Intf_graph.remove_node v arcs g in
+    let g = Interference.remove_node v arcs g in
     (* Format.printf "Node removed == %a\n" Register.string_of_reg v; *)
     (* Format.printf "%a\n----------\n" Pretty_printer.pp_g g; *)
     let c = simplify c g in
@@ -212,7 +212,7 @@ let alloc_registers k mach_regs (g:Intf_graph.graph) =
               let g, rem =
                 Register.S.fold (
                     fun w (g, rem) ->
-                    Intf_graph.merge_nodes w v g, Register.S.remove w rem
+                    Interference.merge_nodes w v g, Register.S.remove w rem
                   ) prefs (g, rem)
               in
               coalesce g rem
@@ -222,7 +222,7 @@ let alloc_registers k mach_regs (g:Intf_graph.graph) =
     let min_degree_node g =
       Register.M.fold (
           fun v _ m_n ->
-          let deg = Intf_graph.degree_of v g in
+          let deg = Interference.degree_of v g in
           match m_n with
           | None ->
              Some (v, deg)
@@ -257,7 +257,7 @@ let alloc_registers k mach_regs (g:Intf_graph.graph) =
       let to_colour = Stack.create () in
       while not (Register.M.is_empty !curr_g) do
         let min_node = match min_degree_node !curr_g with | Some (v, _) -> v | None -> assert false in
-        curr_g := Intf_graph.remove_node min_node (Register.M.find min_node !curr_g) !curr_g;
+        curr_g := Interference.remove_node min_node (Register.M.find min_node !curr_g) !curr_g;
         Stack.push min_node to_colour
       done;
       let sc = ref Register.M.empty in

@@ -189,7 +189,7 @@ expr:
 
 %inline binop:
   | PLUS    { Badd }
-  | MINUS   { Badd }
+  | MINUS   { Bsub }
   | STAR    { Bmul }
   | DIV     { Bdiv }
   | MOD     { Bmod }
