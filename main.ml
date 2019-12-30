@@ -42,8 +42,12 @@ let () =
     if !type_only then exit 0;
     let programme = Is.file type_file in
     let programme = Rtl.file programme in
+    Format.printf "**  ====== RTL =====  **\n";
+    Pp.rtl_file programme;
+    Format.printf "**  === RTL done ===  **\n\n";
     let programme = Ertl.file programme in
-    Ltl.file programme
+    Pp.ertl_file programme
+    (* Ltl.file programme *)
   with
   | Lexer.Lexing_error s ->
      report (lexeme_start_p lb, lexeme_end_p lb);

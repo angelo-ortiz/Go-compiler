@@ -9,17 +9,26 @@ type colouring = colour Register.map
 
 module IntSet = Set.Make( struct let compare = Pervasives.compare type t = int end )
 
+type action =
+  | Simplify
+  | Select of Register.t
+  | Coalesce
+  | Freeze
+  | Spill
+  | Colour_node of Register.t * Interference.arcs
+  | Copy_colour of Register.t * Register.t
+              
 exception Bad_pref_arc
 exception Good_pref_arc of Register.t * Register.t
 exception Found_node of Register.t * Interference.arcs
 exception Found_colour of int
+exception No_possible_colour
         
-let alloc_registers k mach_regs g =
+let alloc_registers mach_regs g =
 
-  let stack = Stack.create () in
-  let spilled_set = ref Register.S.empty
+  let k = Register.S.cardinal mach_regs
   in
-
+  
   let usage_counter =
     let incr_counter v map =
       let c =
@@ -35,7 +44,7 @@ let alloc_registers k mach_regs g =
       ) g Register.M.empty
   in
 
-  let init_degree =
+  let initial_degrees =
     Register.M.map (
         fun arcs -> Register.S.cardinal arcs.intfs
       ) g
@@ -58,7 +67,7 @@ let alloc_registers k mach_regs g =
           else begin
               let cost =
                 float_of_int (Register.M.find v usage_counter)
-                /. (float_of_int (Register.M.find v init_degree))
+                /. (float_of_int (Register.M.find v initial_degrees))
               in
               match min_n with
               | None ->
@@ -79,18 +88,22 @@ let alloc_registers k mach_regs g =
   (* TODO: what about checking colourability based on the initial graph g???
      => no need to store the "current" graph, but finding the set of possible colours 
      would be longer *)
-  let colour_node c g v =
-    let _, arcs = Stack.pop stack in
+  let colour_node c v arcs =
     let poss_colours =
       Register.S.fold (
           fun w colours ->
           match Register.M.find w c with
-          | Spilled _ -> colours
-          | Reg r -> Register.S.remove r colours
+          | Spilled _ ->
+             colours
+          | Reg r ->
+             Register.S.remove r colours
         ) arcs.intfs mach_regs
     in
-    let v_c = Register.S.choose poss_colours in
-    Register.M.add v (Reg v_c) c
+    try 
+      let v_c = Register.S.choose poss_colours in
+      Register.M.add v (Reg v_c) c
+    with Not_found ->
+      raise No_possible_colour
   in
 
   let george_criterion g =
@@ -115,88 +128,100 @@ let alloc_registers k mach_regs g =
     Register.M.iter check_node g
   in
 
-  (* TODO: derecursify these mutually recursive functions
-     big while loop + stack + sum type (Sim/C/F/S/Sel) maybe Col too??? *)
-  let rec simplify c g =
-    let v_opt =
-      Register.M.fold (
-          fun v arcs min_n ->
-          if Register.S.mem v mach_regs || not (Register.S.is_empty arcs.prefs) then min_n
-          else begin
-              let deg = Register.S.cardinal arcs.intfs in
-              if deg >= k then min_n
-              else begin
-                  match min_n with
-                  | None ->
-                     Some (v, deg)
-                  | Some (s, d) when deg < d ->
-                     Some (v, deg)
-                  | m_n ->
-                     m_n
-                end
-            end
-        ) g None
-    in
-    match v_opt with
-    | None ->
-       coalesce c g
-    | Some (v, _) ->
-       select c g v
-      
-  and coalesce c g =
-    try
-      george_criterion g;
-      freeze c g
-    with Good_pref_arc (v1, v2) ->
-      let g = Interference.merge_nodes v1 v2 g in
-      let c = simplify c g in
-      Register.M.add v1 (Register.M.find v2 c) c
-    
-  and freeze c g =
-    try
-      Register.M.iter (
-          fun v arcs ->
-          if Interference.degree_of v g < k then raise (Found_node (v, arcs))
-        ) g;
-      spill c g
-    with Found_node (v, arcs) ->
-      let g =
-        Register.S.fold (
-            fun w g ->
-            let arcs' = Register.M.find w g in
-            Register.M.add w { arcs' with prefs = Register.S.remove v arcs'.prefs } g
-          ) arcs.prefs g
-      in
-      let g = Register.M.add v { arcs with prefs = Register.S.empty } g in
-      simplify c g
-      
-      
-  and spill c g =
-    if Register.M.is_empty g then c
-    else
-      let v = min_cost_node g in
-      select c g v
-      
-  and select c g v =
-    let arcs = Register.M.find v g in
-    Stack.push (v, arcs) stack;
-    let g = Interference.remove_node v arcs g in
-    (* Format.printf "Node removed == %a\n" Register.string_of_reg v; *)
-    (* Format.printf "%a\n----------\n" Pretty_printer.pp_g g; *)
-    let c = simplify c g in
-    try colour_node c g v
-    with Not_found ->
-      spilled_set := Register.S.add v !spilled_set;
-      Register.M.add v (Spilled (next_spilled ())) c
-  in
-  
-  let init_colouring =
-    Register.S.fold (
-        fun r c -> Register.M.add r (Reg r) c
-      ) mach_regs Register.M.empty
+  let min_pref_disconnected_node g =
+    Register.M.fold (
+        fun v arcs min_n ->
+        if not (Register.S.is_empty arcs.prefs) then min_n
+        else begin
+            let deg = Register.S.cardinal arcs.intfs in
+            if deg >= k then min_n
+            else match min_n with
+                 | None ->
+                    Some (v, deg)
+                 | Some (s, d) when deg < d ->
+                    Some (v, deg)
+                 | m_n ->
+                    m_n
+          end
+      ) g None
   in
 
-  let reduce_spilled spilled =
+  let george_appel c g =
+    let spilled = ref Register.S.empty in
+    let curr_g = ref g in
+    let curr_c = ref c in
+    let stack = Stack.create () in
+    Stack.push Simplify stack;
+    while not (Stack.is_empty stack) do
+      match Stack.pop stack with
+      | Simplify ->
+         begin
+           (* Format.printf "Action #1\n"; *)
+           match min_pref_disconnected_node !curr_g with
+           | None ->
+              Stack.push Coalesce stack
+           | Some (v, _) ->
+              Stack.push (Select v) stack
+         end
+      | Select v ->
+         begin
+           (* Format.printf "Action #2\n";
+            * Format.printf "Register deleted %a\n" Register.string_of_reg v; *)
+           let arcs = Register.M.find v !curr_g in
+           Stack.push (Colour_node (v, arcs)) stack;
+           curr_g := Interference.remove_node v arcs !curr_g;
+           Stack.push Simplify stack
+         end
+      | Coalesce ->
+         begin
+           (* Format.printf "Action #3\n"; *)
+           try
+             george_criterion !curr_g;
+             Stack.push Freeze stack
+           with Good_pref_arc (v1, v2) ->
+             curr_g := Interference.merge_nodes v1 v2 !curr_g;
+             Stack.push (Copy_colour (v2, v1)) stack;
+             Stack.push Simplify stack
+         end
+      | Freeze ->
+         begin
+           (* Format.printf "Action #4\n"; *)
+           try
+             Register.M.iter (
+                 fun v arcs ->
+                 if Register.S.cardinal arcs.intfs < k then raise (Found_node (v, arcs))
+               ) !curr_g;
+             Stack.push Spill stack
+           with Found_node (v, arcs) ->
+             (* Format.printf "Register frozen %a\n" Register.string_of_reg v; *)
+             curr_g := Register.S.fold (Interference.remove_pref_arc v) arcs.prefs !curr_g;
+             curr_g := Register.M.add v { arcs with prefs = Register.S.empty } !curr_g;
+             Stack.push Simplify stack
+         end
+      | Spill ->
+         begin
+           (* Format.printf "Action #5\n"; *)
+           if not (Register.M.is_empty !curr_g) then 
+             let v = min_cost_node !curr_g in
+             Stack.push (Select v) stack
+         end
+      | Colour_node (v, arcs) ->
+         begin
+           (* Format.printf "Action #6\n"; *)
+           try
+             if not (is_machine_register v) then curr_c := colour_node !curr_c v arcs
+           with No_possible_colour ->
+             spilled := Register.S.add v !spilled;
+             curr_c := Register.M.add v (Spilled (next_spilled ())) !curr_c
+         end
+      | Copy_colour (col, uncol) ->
+         (* Format.printf "Action #7\n"; *)
+         curr_c := Register.M.add uncol (Register.M.find col !curr_c) !curr_c
+    done;
+    !spilled, !curr_c
+  in
+  
+  let reduce_spilled (spilled, colouring) =
     let reduce_arcs arcs =
       let intfs = Register.S.inter arcs.intfs spilled in
       let prefs = Register.S.inter arcs.prefs spilled in
@@ -280,11 +305,13 @@ let alloc_registers k mach_regs g =
           Register.M.add sp (Spilled n) col
         )
     in
-    let g = coalesce g have_prefs in
-    (* Format.printf "spilled == %a\n" Pretty_printer.pp_set spilled;
-     * Format.printf "%a\n----------\n" Pretty_printer.pp_g g; *)
-    combine_colourings (simplify g)
-    (* combine_colourings (simplify (coalesce g have_prefs)) *)
-
+    combine_colourings (simplify (coalesce g have_prefs)) colouring
   in
-  reduce_spilled !spilled_set (simplify init_colouring g)
+  
+  let initial_colouring =
+    Register.S.fold (
+        fun r c -> Register.M.add r (Reg r) c
+      ) mach_regs Register.M.empty
+  in
+  
+  reduce_spilled (george_appel initial_colouring g)

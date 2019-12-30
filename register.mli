@@ -17,5 +17,5 @@ val rbp : t (* base pointer *)
 val parameters : t list (* first 6 functions actual parameters *)
 val callee_saved : t list
 val caller_saved : t list
-
+val allocable : set  (* working registers *)
 val string_of_reg : Format.formatter -> t -> unit

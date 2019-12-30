@@ -1,5 +1,5 @@
 #CMO=asg.cmo utils.cmo lexer.cmo parser.cmo type_checker.cmo is.cmo rtl.cmo ertl.cmo main.cmo
-CMO=asg.cmo utils.cmo label.cmo register.cmo lexer.cmo parser.cmo type_checker.cmo is.cmo rtl.cmo ertl.cmo liveness.cmo interference.cmo colouring.cmo ltl.cmo main.cmo
+CMO=asg.cmo utils.cmo label.cmo register.cmo lexer.cmo parser.cmo type_checker.cmo is.cmo rtl.cmo ertl.cmo liveness.cmo interference.cmo colouring.cmo pretty_printer.cmo ltl.cmo pp.cmo main.cmo
 GENERATED=lexer.ml parser.ml parser.mli
 BIN=pgoc
 TEST=./test.sh

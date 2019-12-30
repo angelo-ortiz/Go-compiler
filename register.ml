@@ -21,8 +21,10 @@ let rbp = "%rbp"
         
 let parameters = [ rdi; "%rsi"; rdx; "%rcx"; "%r8"; "%r9" ] 
              
-let callee_saved = [ "%rbx"; rbp; "%r12"; "%r13"; "%r14"; "%r15" ]
-let caller_saved = [ rax; "%rcx"; rdx; "%rsi"; rdi; rsp; "%r8"; "%r9"; "%r10"; "%r11" ]
+let callee_saved = [ "%rbx"; "%r12"; "%r13"; "%r14"; "%r15" ]
+let caller_saved = rax :: "%r10" :: "%r11" :: parameters
 
+let allocable = S.of_list (callee_saved @ caller_saved)
+                 
 let string_of_reg fmt r =
   Format.fprintf fmt "%s" r

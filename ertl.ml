@@ -139,7 +139,7 @@ let fun_exit saved retrs exitl =
   graph := Label.M.add exitl (Egoto l) !graph
   
 let funct (f:Rtltree.decl_fun) =
-  Label.M.iter (fun l i -> graph := Label.M.add l (instr i) !graph) f.body; 
+  Label.M.iter (fun l i -> let i = instr i in graph := Label.M.add l i !graph) f.body; 
   let saved = List.map (fun r -> Register.fresh (), r) Register.callee_saved in
   let entry = fun_entry saved f.formals f.entry in
   fun_exit saved f.result f.exit_;
