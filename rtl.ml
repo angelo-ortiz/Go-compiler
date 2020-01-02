@@ -65,7 +65,7 @@ let rec expr destrs e destl =
   | IEbool b ->
      generate (Ebool (b, List.hd destrs, destl))
   | IEnil ->
-    generate (Eint (0L, List.hd destrs, destl))
+    generate (Eint (0l, List.hd destrs, destl))
   | IEmalloc n ->
      generate (Emalloc (List.hd destrs, n, destl))
   | IEaccess v ->
@@ -84,17 +84,17 @@ let rec expr destrs e destl =
       expr r_args (List.hd actuals) lab
      else (* one actual parameter per formal one *)
        List.fold_right2 expr (List.map listify r_args) actuals lab
-  | IEprint es -> (* destrs are not used *)
-     assert false (* TODO *)
-     (* let regs = multi_fresh_list es in
-      * let lab = generate (Eprint (regs, destl)) in (\* TODO: reg list -> reg *\)
-      * List.fold_right2 expr regs es lab *)
+  | IEunop (Mdref, e) ->
+     let rx = List.hd destrs in
+     expr destrs e (
+         generate (Eload (rx, 0, rx, destl))
+       )
   | IEunop (Maddr, e) ->
      let tmp = Register.fresh () in
      expr [tmp] e (
          generate (Elea (tmp, List.hd destrs, destl))
        )
-  | IEunop (op, e) -> (* Mdref can be done with one register *)
+  | IEunop (op, e) ->
      expr destrs e (
          generate (Emunop (op, List.hd destrs, destl))
        )
@@ -125,7 +125,7 @@ and condition e true_l false_l =
      let tmp = Register.fresh () in
      expr [tmp] e (
          generate (
-             let op = if n = 0L then Mjnz else Mjnei n in
+             let op = if n = 0l then Mjnz else Mjnei n in
              Emubranch (op, tmp, false_l, true_l)
            )
        )
@@ -133,7 +133,7 @@ and condition e true_l false_l =
      let tmp = Register.fresh () in
      expr [tmp] e (
          generate (
-             let op = if n = 0L then Mjnz else Mjnei n in
+             let op = if n = 0l then Mjnz else Mjnei n in
              Emubranch (op, tmp, true_l, false_l)
            )
        )
@@ -182,8 +182,12 @@ let rec stmt retrs s exitl destl =
      let _, n_results = List.assoc f !number_formals_results in
      let destrs = multi_fresh_int n_results in
      expr destrs (IEcall (f, actuals)) destl
-  | ISprint es ->
-     expr [] (IEprint es) destl
+  | ISprint (fmt, es) ->
+     let fmt_reg = Register.fresh () in
+     let destrs = multi_fresh_list es in
+     let l = generate (Eprint (fmt_reg :: destrs, destl)) in
+     let l = List.fold_right2 expr (List.map listify destrs) es l in
+     generate (Estring (fmt, fmt_reg, l)) 
   | ISif (e, bif, belse) ->
      condition e
        (block retrs bif exitl destl)

@@ -55,7 +55,7 @@ let move_return_def l = function
 
 let pop n l =
   if n = 0 then l
-  else generate (Emunop (Maddi (Int64.of_int n), Register.rsp, l))
+  else generate (Emunop (Maddi (Int32.of_int n), Register.rsp, l))
   
 let instr = function
   | Rtltree.Eint (n, r, l) ->
@@ -107,7 +107,7 @@ let instr = function
   | Rtltree.Embinop (op, r1, r2, l) ->
      Embinop (op, r1, r2, l)
   | Rtltree.Emalloc (r, n, l) ->
-     Eint (Int64.of_int n, Register.rdi, generate (
+     Eint (Int32.of_int n, Register.rdi, generate (
      Ecall (1, "malloc", 1, generate (
      Embinop (Mmov, Register.rax, r, l)))))
   | Rtltree.Ecall (res, f, actuals, l) ->
@@ -118,9 +118,14 @@ let instr = function
      let l = List.fold_right (fun r l -> push_param r l) stack l in
      let l = List.fold_right (fun (a, r) l -> move a r l) act_param l in
      Egoto l
-  | Rtltree.Eprint (r, destl) -> (* TODO: cf rtl *)
-     Embinop (Mmov, r, Register.rdi, generate (
-     Ecall (0, "puts", 1, destl)))
+  | Rtltree.Eprint (regs, l) ->
+     let arg_param, stack = assoc_arguments regs in
+     let n = List.length arg_param in
+     let l = generate (Ecall (0, "printf", n, l)) in
+     let l = generate (Emunop (Mxor, Register.rax, l)) in (* set AL to 0 *)
+     let l = List.fold_right (fun r l -> push_param r l) stack l in
+     let l = List.fold_right (fun (a, r) l -> move a r l) arg_param l in
+     Egoto l
 
 let fun_entry saved formals entry =
   let form_param, stack = assoc_arguments formals in

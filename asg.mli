@@ -52,7 +52,7 @@ and tblock = {
 and tstmt =
   | TSnop
   | TScall of string * texpr list
-  | TSprint of texpr list
+  | TSprint of string * texpr list
   | TSincr of texpr
   | TSdecr of texpr
   | TSblock of tblock

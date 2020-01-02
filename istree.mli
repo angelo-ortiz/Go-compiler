@@ -4,12 +4,11 @@
 type ident = string
 
 type munop =
-  | Mnot | Mneg | Mdref | Maddr
-  | Maddi of int64 | Mimuli of int64 | Minc | Mdec
-  | Midivil of int64 | Midivir of int64 | Mmodil of int64 | Mmodir of int64
-  | Msal of int64 | Msar of int64 | Mshr of int64
-  | Msetei of int64 | Msetnei of int64 | Msetgi of int64 | Msetgei of int64
-  | Msetli of int64 | Msetlei of int64
+  | Mnot | Mneg | Mdref | Maddr | Mxor
+  | Maddi of int32 | Mimuli of int32 | Minc | Mdec
+  | Midivil of int32 | Midivir of int32 | Mmodil of int32 | Mmodir of int32
+  | Msetei of int32 | Msetnei of int32 | Msetgi of int32 | Msetgei of int32
+  | Msetli of int32 | Msetlei of int32
 
 type mbinop =
   | Madd | Msub | Mimul | Midiv | Mmod
@@ -17,7 +16,7 @@ type mbinop =
   | Mmov
            
 type iexpr =
-  | IEint of int64
+  | IEint of int32
   | IEstring of string
   | IEbool of bool
   | IEnil
@@ -25,7 +24,6 @@ type iexpr =
   | IEaccess of ident
   | IEload of iexpr * int
   | IEcall of ident * iexpr list
-  | IEprint of iexpr list
   | IEunop of munop * iexpr
   | IEbinop of mbinop * iexpr * iexpr
   | IEand of iexpr * iexpr
@@ -39,7 +37,7 @@ type assign =
 type istmt =
   | ISexpr of iexpr
   | IScall of ident * iexpr list
-  | ISprint of iexpr list
+  | ISprint of string * iexpr list
   | ISif of iexpr * istmt list * istmt list
   | ISassign of assign list * iexpr list
   | ISreturn of iexpr list

@@ -11,7 +11,7 @@ type info = {
     out_ : Register.set;
   }
 
-let kildall g =
+let perform_analysis g =
   let def_use = function
     | Eint (_, r, _) | Estring (_, r, _) | Ebool (_, r, _)
     | Eget_param (_, r, _) | Epop_param (r, _) ->
@@ -99,7 +99,7 @@ let kildall g =
     set_preds info_map, set
   in
   
-  let rec loop (info_map, ws) =
+  let rec kildall (info_map, ws) =
     if Label.S.is_empty ws then info_map
     else begin
         let l = Label.S.choose ws in
@@ -110,10 +110,10 @@ let kildall g =
         let in_ = in_vars info.def info.use out_ in
         let info_map = Label.M.add l { info with in_; out_ } info_map in
         let ws = if Register.S.subset in_ old_in_ then ws else Label.S.union ws info.pred in
-        loop (info_map, ws)
+        kildall (info_map, ws)
       end
   in
 
-  loop (initialise g)
+  kildall (initialise g)
 
     

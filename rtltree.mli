@@ -5,15 +5,15 @@ type register = Register.t
 type label = Label.t
 
 type mubranch =
-  | Mjz | Mjnz | Mjei of int64 | Mjnei of int64
-  | Mjgi of int64 | Mjgei of int64 | Mjli of int64 | Mjlei of int64
+  | Mjz | Mjnz | Mjei of int32 | Mjnei of int32
+  | Mjgi of int32 | Mjgei of int32 | Mjli of int32 | Mjlei of int32
 
 type mbbranch =
   | Mje | Mjne | Mjg | Mjge| Mjl | Mjle
 
 type instr =
-  | Eint of int64 * register * label
-  | Estring of string * register * label (* TODO *)
+  | Eint of int32 * register * label
+  | Estring of string * register * label
   | Ebool of bool * register * label
   | Emalloc of register * int * label
   | Elea of register * register * label (* src | dst *)
@@ -21,8 +21,8 @@ type instr =
   | Estore_field of register * register * int * label (* src | dst | offset *)
   | Estore_dref of register * register * label (* src | dst *)
   | Ecall of register list * string * register list * label (* result | name | args *)
-  | Eprint of register * label (* expressions *)
-  | Emunop of Istree.munop * register * label
+  | Eprint of register list * label (* expressions *)
+  | Emunop of Istree.munop * register * label (* w/o Mdref, Maddr *)
   | Embinop of Istree.mbinop * register * register * label
   | Emubranch of mubranch * register * label * label (* true | false *)
   | Embbranch of mbbranch * register * register * label * label (* 2nd arg | 1st arg *)

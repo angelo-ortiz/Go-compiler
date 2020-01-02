@@ -38,11 +38,11 @@ let prepend_bnumber tvar =
 let rec mk_add e1 e2 =
   match e1, e2 with
   | IEint n1, IEint n2 ->
-     IEint (Int64.add n1 n2)
-  | e, IEint 0L | IEint 0L, e ->
+     IEint (Int32.add n1 n2)
+  | e, IEint 0l | IEint 0l, e ->
      e
   | IEunop (Maddi n1, e), IEint n2 | IEint n2, IEunop (Maddi n1, e) ->
-     mk_add (IEint (Int64.add n1 n2)) e
+     mk_add (IEint (Int32.add n1 n2)) e
   | e, IEint n | IEint n, e ->
      IEunop (Maddi n, e)
   | _ ->
@@ -50,26 +50,26 @@ let rec mk_add e1 e2 =
     
 let rec mk_neg = function
   | IEint n ->
-     IEint (Int64.neg n)
+     IEint (Int32.neg n)
   | IEunop (Maddi n, e) ->
-     IEunop (Maddi (Int64.neg n), mk_neg e)
+     IEunop (Maddi (Int32.neg n), mk_neg e)
   | _ as e ->
      IEunop (Mneg, e)
     
 and  mk_sub e1 e2 =
   match e1, e2 with
   | IEint n1, IEint n2 ->
-     IEint (Int64.sub n1 n2)
-  | e, IEint 0L ->
+     IEint (Int32.sub n1 n2)
+  | e, IEint 0l ->
      e
-  | IEint 0L, e ->
+  | IEint 0l, e ->
      mk_neg e
   | IEunop (Maddi n1, e), IEint n2 ->
-     mk_sub e (IEint (Int64.sub n2 n1)) 
+     mk_sub e (IEint (Int32.sub n2 n1)) 
   | IEint n2, IEunop (Maddi n1, e) ->
-     mk_sub (IEint (Int64.sub n2 n1)) e
+     mk_sub (IEint (Int32.sub n2 n1)) e
   | e, IEint n ->
-     IEunop (Maddi (Int64.neg n), e)
+     IEunop (Maddi (Int32.neg n), e)
   | IEint n, e ->
      IEunop (Maddi n, mk_neg e)
   | _ ->
@@ -78,9 +78,9 @@ and  mk_sub e1 e2 =
 let rec mk_mul e1 e2 =
   match e1, e2 with
   | IEint n1, IEint n2 ->
-     IEint (Int64.mul n1 n2)
+     IEint (Int32.mul n1 n2)
   | IEunop (Mimuli n1, e), IEint n2 | IEint n2, IEunop (Mimuli n1, e) ->
-     mk_mul (IEint (Int64.mul n1 n2)) e
+     mk_mul (IEint (Int32.mul n1 n2)) e
   | e, IEint n | IEint n, e ->
      IEunop (Mimuli n, e)
   | _ ->
@@ -88,14 +88,14 @@ let rec mk_mul e1 e2 =
 
 let rec mk_div e1 e2 =
   match e1, e2 with
-  | IEint n1, IEint n2 when n2 = 0L ->
+  | IEint n1, IEint n2 when n2 = 0l ->
      Utils.optimiser_error Utils.dummy_loc "division by zero"
   | IEint n1, IEint n2 ->
-     IEint (Int64.div n1 n2)
-  | e, IEint 1L ->
+     IEint (Int32.div n1 n2)
+  | e, IEint 1l ->
      e
   | IEunop (Midivil n1, e), IEint n2 ->
-     mk_div e (IEint (Int64.mul n1 n2))
+     mk_div e (IEint (Int32.mul n1 n2))
   | e, IEint n ->
      IEunop (Midivil n, e)
   | IEint n, e ->
@@ -105,10 +105,10 @@ let rec mk_div e1 e2 =
 
 let rec mk_mod e1 e2 =
   match e1, e2 with
-  | IEint n1, IEint n2 when n2 = 0L ->
+  | IEint n1, IEint n2 when n2 = 0l ->
      Utils.optimiser_error Utils.dummy_loc "division by zero"
   | IEint n1, IEint n2 ->
-     IEint (Int64.rem n1 n2)
+     IEint (Int32.rem n1 n2)
   | e, IEint n ->
      IEunop (Mmodil n, e)
   | IEint n, e ->
@@ -194,7 +194,7 @@ let mk_le e1 e2 =
 let rec expr e =
   match e.tdesc with
   | TEint n ->
-     IEint n
+     IEint (Int64.to_int32 n)
   | TEstring str ->
      IEstring str
   | TEbool b ->
@@ -212,7 +212,8 @@ let rec expr e =
   | TEcall (f, actuals) ->
      IEcall (f, List.map expr actuals)
   | TEprint es ->
-     IEprint (List.map expr es)
+     (* IEprint (List.map expr es) *)
+     assert false
   | TEunop (Ast.Unot, e) ->
      mk_not (expr e)
   | TEunop (Ast.Uneg, e) ->
@@ -265,8 +266,11 @@ let rec stmt locals body = function
      locals, body
   | TScall (f, actuals) ->
      locals, IScall (f, List.map expr actuals) :: body
-  | TSprint es ->
-     locals, ISprint (List.map expr es) :: body
+  | TSprint (fmt, es) when fmt = "" ->
+     (* no format means no expressions to print *)
+     locals, body
+  | TSprint (fmt, es) ->
+     locals, ISprint (fmt, List.map expr es) :: body
   | TSincr e ->
      locals, ISexpr (IEunop (Minc, expr e)) :: body
   | TSdecr e ->

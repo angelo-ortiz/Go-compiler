@@ -303,7 +303,7 @@ let rec scan_tstmt loc env use_queue exp_rtype = function
   | TScall (_, actuals) ->
      let env, use_queue = scan_texpr_list env use_queue actuals in
      env, use_queue, false
-  | TSprint texps ->
+  | TSprint (_, texps) ->
      let env, use_queue = scan_texpr_list env use_queue texps in
      env, use_queue, false
   | TSincr texp | TSdecr texp ->

@@ -36,7 +36,7 @@ and tdesc =
   | TEident of tvar
   | TEselect of texpr * string
   | TEcall of string * texpr list
-  | TEprint of texpr list
+  | TEprint of texpr list (* it does not survive as an expression, but only as a statement *)
   | TEunop of Ast.unop * texpr
   | TEbinop of Ast.binop * texpr * texpr
 
@@ -49,7 +49,7 @@ and tblock = {
 and tstmt =
   | TSnop
   | TScall of string * texpr list
-  | TSprint of texpr list
+  | TSprint of string * texpr list (* format and expressions *)
   | TSincr of texpr
   | TSdecr of texpr
   | TSblock of tblock

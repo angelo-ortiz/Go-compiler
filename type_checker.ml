@@ -45,6 +45,57 @@ let rec type_of_ast_typ = function
   | Ast.Tpointer typ ->
      TTpointer (type_of_ast_typ typ)
 
+let rec format_type fmt = function
+  | TTint ->
+     Format.fprintf fmt "%%d"
+  | TTstring ->
+     Format.fprintf fmt "%%s"
+  | TTbool ->
+     Format.fprintf fmt "%%s"
+  | TTstruct str ->
+     Format.fprintf fmt "{ }"
+  | TTpointer typ ->
+     Format.fprintf fmt "%%p"
+  | TTtuple tl ->
+     Format.fprintf fmt "%a" format_type_list tl
+  | TTnil | TTunit | TTuntyped ->
+     assert false
+
+and format_type_list fmt tl =
+  let rec format_list fmt = function
+    | [] ->
+       ()
+    | t :: tl ->
+       Format.fprintf fmt "%a %a" format_type t format_list tl
+  in match tl with
+     | [] ->
+        ()
+     | [t] ->
+        format_type fmt t
+     | t :: tl ->
+        Format.fprintf fmt "%a %a" format_type t format_list tl
+
+let format_of_type fmt = function
+  | TTpointer (TTstruct str) ->
+     (* There is a special treatment for pointers to struct *)
+     let fields = (Smap.find str !struct_env).fields in
+     Format.fprintf fmt "&{%a}" format_type_list (List.map snd fields)
+  | _ as t ->
+     format_type fmt t
+
+let format_of_texpr fmt te =
+  match te.tdesc with
+  | TEint n ->
+     Format.fprintf fmt "%s" (Int64.to_string n)
+  | TEstring s ->
+     Format.fprintf fmt "%s" s
+  | TEbool b ->
+     Format.fprintf fmt "%d" (if b then 1 else 0)
+  | TEnil -> (* Go uses <nil>, but it is hard to print <nil> from assembly *)
+     Format.fprintf fmt "0"
+  | _ ->
+     format_of_type fmt te.typ
+    
 let type_of_unop exp op t_exp =
   match op, t_exp.typ with
   | Ast.Unot, TTbool ->
@@ -167,9 +218,6 @@ and compute_type env e =
              Utils.type_error e.loc (Format.sprintf "undefined %s" f)
      end
   | Ast.Eprint el -> (* Behaviour in Go: this outputs (int, exn) *)
-     if not !import_fmt then
-       Utils.type_error e.loc "undefined: fmt";
-     used_fmt := true;
      TEprint (type_expr_list env el), TTunit, false
   | Ast.Eunop (op, e) ->
      let t_e = type_expr env e in
@@ -329,9 +377,13 @@ let rec type_shstmt env b_vars b_number = function
           let actuals = match t_call.tdesc with | TEcall (_, act) -> act | _ -> assert false in
           b_vars, TScall (f, actuals)
        | Eprint el ->
-          let t_print = type_expr env e in
-          let exprs = match t_print.tdesc with | TEprint exprs -> exprs | _ -> assert false in
-          b_vars, TSprint exprs
+          if not !import_fmt then
+            Utils.type_error e.loc "undefined: fmt";
+          used_fmt := true;
+          let exprs = type_expr_list env el in
+          let printer fmt = List.iter (format_of_texpr fmt) in
+          let format = Format.asprintf "%a" printer exprs in
+          b_vars, TSprint (format, exprs)
      end
   | Ast.Iincr e | Idecr e as i_d->
      let string_of_op = match i_d with | Iincr _ -> "++" | Idecr _ -> "--" | _ -> assert false in

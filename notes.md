@@ -1,11 +1,11 @@
 TODO
 ----
-1. Lexer
-  * Escape character *%* for function print 
-1. Parser
-  * Check syntax error messages
-1. Semantic analyser
+1. (OK) Lexer
+1. (OK) Parser
+1. (OK) Semantic analyser
 1. Assembly-code producer
+  * (OK) Sem -> IS translation
+  * (OK) IS -> RTL translation
   * ERTL -> LTL translation
   * LTL -> LIN transaltion
 
@@ -18,6 +18,8 @@ Remarks
 1. Finished -> IS -> RTL -> ERTL translations
 1. Finished liveness & interference analyses, and register allocation (colouring)
 1. Print should be implemented with assembly's primitive *printf*
+1. Escaped character *%* in lexer for function print 
+1. Must make a last check pass to delete futile *nop*s (Union-Find) when translationg to LTL
 
 Fixed issues
 ------------

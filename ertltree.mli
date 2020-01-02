@@ -5,7 +5,7 @@ type register = Register.t
 type label = Label.t
 
 type instr =
-  | Eint of int64 * register * label
+  | Eint of int32 * register * label
   | Estring of string * register * label (* TODO: cf rtltree *)
   | Ebool of bool * register * label
   | Elea of register * register * label (* src | dst *)

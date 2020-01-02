@@ -86,6 +86,7 @@ rule token = parse
 and string = parse
   | '"'   					{ let str = Buffer.contents str_buf in
   							  Buffer.reset str_buf; set_start_pos lexbuf; str }
+  | '%'   					{ Buffer.add_string str_buf "%%"; string lexbuf }
   | "\\\\"					{ Buffer.add_char str_buf '\\'; string lexbuf }
   | "\\\""					{ Buffer.add_char str_buf '\"'; string lexbuf }
   | "\\n"					{ Buffer.add_char str_buf '\n'; string lexbuf }
