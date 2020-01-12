@@ -12,18 +12,21 @@ type info = {
   }
 
 let perform_analysis g =
-  let def_use = function
+  
+  let def_use = function (* TODO: check unop/binop/mubranch/mbbranch individual ops s.t. idiv(l) *)
     | Eint (_, r, _) | Estring (_, r, _) | Ebool (_, r, _)
     | Eget_param (_, r, _) | Epop_param (r, _) ->
        Register.S.singleton r, Register.S.empty
-    | Elea (src, dst, _) | Eload (src, _, dst, _) ->
+    | Elea_local (src, _, dst, _) | Elea (src, _, dst, _) | Eload (src, _, dst, _)
+    | Embinop (Mmov, src, dst, _) ->
        Register.S.singleton dst, Register.S.singleton src
     | Emunop (Istree.Midivil _, r, _) ->
        assert (r = Register.rax);
        let set = Register.S.add r (Register.S.singleton Register.rdx) in
        set, set
     | Emunop (_, r, _) ->
-       Register.S.singleton r, Register.S.singleton r
+       let set = Register.S.singleton r in
+       set, set
     | Embinop (Midiv, src, dst, _) ->
        assert (dst = Register.rax);
        let def = Register.S.add dst (Register.S.singleton Register.rdx) in
@@ -33,23 +36,23 @@ let perform_analysis g =
        def, Register.S.add src def
     | Emubranch (_, r, _, _) | Epush_param (r, _) ->
        Register.S.empty, Register.S.singleton r
-    | Estore_field (r1, r2, _, _) | Estore_dref (r1, r2, _) | Embbranch (_, r2, r1, _, _) ->
+    | Estore (r1, r2, _, _) | Embbranch (_, r2, r1, _, _) ->
        Register.S.empty, Register.S.add r1 (Register.S.singleton r2)
-    | Egoto _ | Ealloc_frame _ | Efree_frame _ ->
+    | Egoto _ | Ealloc_frame _ | Efree_frame _ | Ealloc_stack _ | Efree_stack _ ->
        Register.S.empty, Register.S.empty
-    | Ecall (n_res, _, n_r_args, _) ->
+    | Ecall (_, n_r_args, _) ->
        Register.S.of_list Register.caller_saved,
        Register.S.of_list (Utils.prefix n_r_args Register.parameters)
-    | Ereturn -> (* TODO: what about the other return registers??? *)
+    | Ereturn ->
        Register.S.empty, Register.S.add Register.rax (Register.S.of_list Register.callee_saved)
   in
   
   let succ = function
-    | Eint (_, _, l) | Estring (_, _, l) | Ebool (_, _, l) | Elea (_, _, l)
-    | Eload (_, _, _, l) | Estore_field (_, _, _, l) | Estore_dref (_, _, l)
-    | Ecall (_, _, _, l) | Emunop (_, _, l) | Embinop (_, _, _, l) | Egoto l
-    | Ealloc_frame l | Efree_frame l | Eget_param (_, _, l) | Epop_param (_, l)
-    | Epush_param (_, l) ->
+    | Eint (_, _, l) | Estring (_, _, l) | Ebool (_, _, l) | Elea_local (_, _, _, l)
+    | Elea (_, _, _, l) | Eload (_, _, _, l) | Estore (_, _, _, l) | Ecall (_, _, l)
+    | Emunop (_, _, l) | Embinop (_, _, _, l) | Egoto l | Ealloc_frame l
+    | Efree_frame l | Ealloc_stack (_, l) | Efree_stack (_, l) | Eget_param (_, _, l)
+    | Epop_param (_, l) | Epush_param (_, l) ->
        Label.S.singleton l
     | Emubranch (_, _, l1, l2) | Embbranch (_, _, _, l1, l2) ->
        Label.S.add l1 (Label.S.singleton l2)
@@ -115,5 +118,3 @@ let perform_analysis g =
   in
 
   kildall (initialise g)
-
-    

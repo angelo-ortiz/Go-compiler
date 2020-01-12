@@ -14,6 +14,8 @@ val rdx : t (* division remainder *)
 val rdi : t (* new & println *)
 val rsp : t (* frame pointer *)
 val rbp : t (* base pointer *)
+val tmp1 : t (* temporary register *)
+val tmp2 : t (* temporary register *)
 val parameters : t list (* first 6 functions actual parameters *)
 val callee_saved : t list
 val caller_saved : t list

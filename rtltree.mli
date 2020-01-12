@@ -15,14 +15,14 @@ type instr =
   | Eint of int32 * register * label
   | Estring of string * register * label
   | Ebool of bool * register * label
-  | Emalloc of register * int * label
-  | Elea of register * register * label (* src | dst *)
-  | Eload of register * int * register * label (* src | offset | dst *)
-  | Estore_field of register * register * int * label (* src | dst | offset *)
-  | Estore_dref of register * register * label (* src | dst *)
-  | Ecall of register list * string * register list * label (* result | name | args *)
+  | Emalloc of register * int32 * label
+  | Elea_local of register list * int * register * label (* local register | offset | dst *)
+  | Elea of register * int * register * label (* src | offset | dst *)
+  | Eload of register list * int * register list * label (* src | offset | dst *)
+  | Estore of register * register * int * label (* src | dst | offset *)
+  | Ecall of register list * string * register list * label (* results | name | args *)
   | Eprint of register list * label (* expressions *)
-  | Emunop of Istree.munop * register * label (* w/o Mdref, Maddr *)
+  | Emunop of Istree.munop * register * label
   | Embinop of Istree.mbinop * register * register * label
   | Emubranch of mubranch * register * label * label (* true | false *)
   | Embbranch of mbbranch * register * register * label * label (* 2nd arg | 1st arg *)
@@ -30,8 +30,6 @@ type instr =
 
 type graph = instr Label.map
 
-type decl_struct = int
-           
 type decl_fun = {
     formals : register list;
     result : register list;
@@ -41,7 +39,4 @@ type decl_fun = {
     body : instr Label.map;
   }
 
-type file = {
-    structs : decl_struct Asg.smap;
-    functions : decl_fun Asg.smap;
-  }
+type file = decl_fun Asg.smap

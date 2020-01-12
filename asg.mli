@@ -16,7 +16,7 @@ type t_typ =
 type tvar = {
     id : string;
     b_number : int;
-    typ: t_typ;
+    ty: t_typ;
     loc : Ast.loc
   }
 
@@ -38,6 +38,7 @@ and tdesc =
   | TEnew of t_typ
   | TEident of tvar
   | TEselect of texpr * string
+  | TEselect_dref of texpr * string
   | TEcall of string * texpr list
   | TEprint of texpr list
   | TEunop of Ast.unop * texpr

@@ -18,11 +18,13 @@ let rdx = "%rdx"
 let rdi = "%rdi"
 let rsp = "%rsp"
 let rbp = "%rbp"
-        
+let tmp1 = "%r11"
+let tmp2 = "%r15"
+  
 let parameters = [ rdi; "%rsi"; rdx; "%rcx"; "%r8"; "%r9" ] 
              
-let callee_saved = [ "%rbx"; "%r12"; "%r13"; "%r14"; "%r15" ]
-let caller_saved = rax :: "%r10" :: "%r11" :: parameters
+let callee_saved = [ "%rbx"; (* rbp; *) "%r12"; "%r13"; "%r14"; (* "%r15" *) ]
+let caller_saved = rax :: "%r10" :: (* "%r11" :: *) parameters
 
 let allocable = S.of_list (callee_saved @ caller_saved)
                  

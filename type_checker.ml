@@ -5,13 +5,16 @@ open Asg
  *** 0 -> unit
  *** 1 -> tau
  *** 2+ -> list of tau 
-*)
+ *)
 
 let struct_env : Asg.decl_struct Smap.t ref = ref Smap.empty
 let func_env : Asg.decl_fun Smap.t ref = ref Smap.empty
 let import_fmt = ref false
 let used_fmt = ref false
+(* used for block enumeration *)
 let block_number = ref (-1)
+(* contains the exact expressions to be printed according to a printf-based format*)
+let print_exprs = ref [] 
 
 let next_bnumber () =
   incr block_number; !block_number
@@ -45,56 +48,63 @@ let rec type_of_ast_typ = function
   | Ast.Tpointer typ ->
      TTpointer (type_of_ast_typ typ)
 
-let rec format_type fmt = function
+let rec format_by_type fmt te =
+  match te.typ with 
   | TTint ->
+     print_exprs := te :: !print_exprs;
      Format.fprintf fmt "%%d"
   | TTstring ->
+     print_exprs := te :: !print_exprs;
      Format.fprintf fmt "%%s"
   | TTbool ->
-     Format.fprintf fmt "%%s"
+     print_exprs := te :: !print_exprs;
+     Format.fprintf fmt "%%d"
   | TTstruct str ->
-     Format.fprintf fmt "{ }"
+     let fields = (Smap.find str !struct_env).fields in
+     let is_assignable, loc = te.is_assignable, te.loc in
+     let field_to_texpr (fd, typ) = { tdesc = TEselect (te, fd); typ; is_assignable; loc } in
+     Format.fprintf fmt "{%a}" format_by_type_list (List.map field_to_texpr fields)
   | TTpointer typ ->
+     print_exprs := te :: !print_exprs;
      Format.fprintf fmt "%%p"
   | TTtuple tl ->
-     Format.fprintf fmt "%a" format_type_list tl
+     (* TODO *)
+     (* Format.fprintf fmt "%a" format_type_list tl *)
+     assert false
   | TTnil | TTunit | TTuntyped ->
      assert false
 
-and format_type_list fmt tl =
-  let rec format_list fmt = function
-    | [] ->
-       ()
-    | t :: tl ->
-       Format.fprintf fmt "%a %a" format_type t format_list tl
-  in match tl with
-     | [] ->
-        ()
-     | [t] ->
-        format_type fmt t
-     | t :: tl ->
-        Format.fprintf fmt "%a %a" format_type t format_list tl
+and format_by_type_list fmt = function
+  | [] ->
+     ()
+  | [t] ->
+     format_by_type fmt t
+  | t :: tl ->
+     Format.fprintf fmt "%a %a" format_by_type t format_by_type_list tl
 
-let format_of_type fmt = function
+let format_by_type_main fmt te =
+  match te.typ with
   | TTpointer (TTstruct str) ->
-     (* There is a special treatment for pointers to struct *)
+     (* There is a special case for pointers to struct *)
      let fields = (Smap.find str !struct_env).fields in
-     Format.fprintf fmt "&{%a}" format_type_list (List.map snd fields)
-  | _ as t ->
-     format_type fmt t
+     let is_assignable, loc = te.is_assignable, te.loc in
+     let field_to_texpr (fd, typ) = { tdesc = TEselect_dref (te, fd); typ; is_assignable; loc } in
+     Format.fprintf fmt "&{%a}" format_by_type_list (List.map field_to_texpr fields)
+  | _ ->
+     format_by_type fmt te
 
 let format_of_texpr fmt te =
   match te.tdesc with
   | TEint n ->
-     Format.fprintf fmt "%s" (Int64.to_string n)
+     Format. fprintf fmt "%s" (Int64.to_string n)
   | TEstring s ->
      Format.fprintf fmt "%s" s
-  | TEbool b ->
+  | TEbool b -> (* Go prints "true"/"false", but it is hard to do so from assembly *)
      Format.fprintf fmt "%d" (if b then 1 else 0)
-  | TEnil -> (* Go uses <nil>, but it is hard to print <nil> from assembly *)
+  | TEnil -> (* Go prints <nil>, but it is hard to do so from assembly *)
      Format.fprintf fmt "0"
   | _ ->
-     format_of_type fmt te.typ
+     format_by_type_main fmt te
     
 let type_of_unop exp op t_exp =
   match op, t_exp.typ with
@@ -124,19 +134,30 @@ let type_of_binop = function
      TTint
   | Ast.Beq | Ast.Bneq | Ast.Blt | Ast.Ble | Ast.Bgt | Ast.Bge | Ast.Band | Ast.Bor ->
      TTbool
-  
-let new_var id b_number ?(loc=Utils.dummy_loc) typ =
-  { id; b_number; typ; loc }
 
-(* unique variable `_` *)
-let underscore =
-  { id = "_"; b_number = 0; typ = TTuntyped; loc = Utils.dummy_loc }
+let tdesc_of_select t_str fd =
+  match t_str.typ, t_str.tdesc with
+  | TTpointer (TTstruct _), _ ->
+     TEselect_dref (t_str, fd)
+  | TTstruct _, TEunop (Ast.Udref, t_str) ->
+     (* I'd rather use C's "->" than C's "." *)
+     TEselect_dref (t_str, fd)
+  | TTstruct _, _ ->
+     TEselect (t_str, fd)
+  | _, _ ->
+     assert false
+  
+let new_var id b_number ?(loc=Utils.dummy_loc) ty =
+  { id; b_number; ty; loc }
+
+let underscore ty =
+  { id = "_"; b_number = 0; ty; loc = Utils.dummy_loc }
 
 (* unique expression `_` *)
 let under_texpr =
-  { tdesc = TEident underscore; typ = TTuntyped; is_assignable = true; loc = Utils.dummy_loc }
+  { tdesc = TEident (underscore TTuntyped); typ = TTuntyped; is_assignable = true; loc = Utils.dummy_loc }
 
-let rec type_expr (env:Asg.tvar Asg.Smap.t) (e:Ast.expr) =
+let rec type_expr env (e:Ast.expr) =
   let tdesc, typ, is_assignable = compute_type env e in
   { tdesc; typ; is_assignable; loc = e.loc }
   
@@ -164,7 +185,7 @@ and compute_type env e =
      begin
        try
          let tvar = Smap.find v env in
-         TEident tvar, tvar.typ, true
+         TEident tvar, tvar.ty, true
        with Not_found ->
          Utils.type_error e.loc (Format.sprintf "undefined %s" v)
      end
@@ -180,7 +201,7 @@ and compute_type env e =
               Utils.type_error fd_loc (Format.asprintf "%a.%s undefined (type %a has no field %s)"
                                          Utils.string_of_expr str.desc fd Utils.string_of_type t fd)
           in
-          TEselect (t_str, fd), fd_type, t_str.is_assignable
+          tdesc_of_select t_str fd, fd_type, t_str.is_assignable
        | TTint | TTstring | TTbool | TTunit | TTtuple _ | TTpointer _ as t ->
           Utils.type_error str.loc (Format.asprintf "%a.%s undefined (type %a has no field %s)"
                                 Utils.string_of_expr str.desc fd Utils.string_of_type t fd)
@@ -195,7 +216,7 @@ and compute_type env e =
        try
          let var = Smap.find f env in
          Utils.type_error e.loc
-           (Format.asprintf "cannot call non-function %s (type %a)" f Utils.string_of_type var.typ)
+           (Format.asprintf "cannot call non-function %s (type %a)" f Utils.string_of_type var.ty)
        with Not_found ->
          (* check if f has been defined as a function *)
          try
@@ -310,7 +331,8 @@ let type_assigned_values env loc to_be_assigned values =
        | TTtuple vs ->
           vs
        | TTunit ->
-          Utils.type_error value.loc (Format.asprintf "%a used as value" Utils.string_of_expr value.desc)
+          Utils.type_error value.loc
+            (Format.asprintf "%a used as value" Utils.string_of_expr value.desc)
        | _ as vs ->
           [vs]
      in
@@ -327,7 +349,8 @@ let type_assigned_values env loc to_be_assigned values =
                else fun _ ->
                     Format.asprintf "cannot assign %a to %a (type %a) in multiple assignment"
                       Utils.string_of_type t_v Utils.string_of_texpr te_ass
-                      Utils.string_of_type te_ass.typ in
+                      Utils.string_of_type te_ass.typ
+             in
              Utils.single_texpr_compatible_types te_ass.typ t_v te_value.loc f_msg
            ) to_be_assigned t_values;
          match t_values with
@@ -383,7 +406,9 @@ let rec type_shstmt env b_vars b_number = function
           let exprs = type_expr_list env el in
           let printer fmt = List.iter (format_of_texpr fmt) in
           let format = Format.asprintf "%a" printer exprs in
-          b_vars, TSprint (format, exprs)
+          let p_exprs = List.rev !print_exprs in
+          print_exprs := [];
+          b_vars, TSprint (format, p_exprs)
      end
   | Ast.Iincr e | Idecr e as i_d->
      let string_of_op = match i_d with | Iincr _ -> "++" | Idecr _ -> "--" | _ -> assert false in
@@ -434,7 +459,7 @@ let rec type_shstmt env b_vars b_number = function
           assert false
        | (id, loc) :: var_names, typ :: types when id = "_" ->
           (* variable "_" is not added to the local environment *)
-          update_var_map var_map (underscore :: t_vars) (var_names, types)
+          update_var_map var_map (underscore typ :: t_vars) (var_names, types)
        | (id, loc) :: var_names, typ :: types ->
           (* check name unicity *)
           try
@@ -487,7 +512,7 @@ let rec type_stmt env b_vars b_number = function
                var_map, List.rev t_vars
             | (id, loc) :: var_names when id = "_" ->
                (* variable "_" is not added to the local environment *)
-               update_var_map var_map (underscore :: t_vars) var_names
+               update_var_map var_map (underscore typ :: t_vars) var_names
             | (id, loc) :: var_names ->
                (* check name unicity *)
                try
@@ -530,7 +555,7 @@ let rec type_stmt env b_vars b_number = function
                assert false
             | (id, loc) :: var_names, typ :: types when id = "_" ->
                (* variable "_" is not added to the local environment *)
-               update_var_map var_map (underscore :: t_vars) (var_names, types)
+               update_var_map var_map (underscore typ :: t_vars) (var_names, types)
             | (id, loc) :: var_names, typ :: types ->
                (* check name unicity *)
                try
@@ -592,7 +617,7 @@ and type_block env stmts ?ending_stmt number =
     | st :: stmts, _ ->
        let var_map, t_st = type_stmt env var_map number st in
        (* the 'global' environment is updated by the block *)
-       let env = update_env env var_map t_st in (* TODO: non-optimal *)
+       let env = update_env env var_map t_st in
        loop env var_map stmts ending_stmt (t_st :: t_stmts) number
   in loop env Smap.empty stmts ending_stmt [] number
 

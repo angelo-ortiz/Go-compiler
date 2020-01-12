@@ -13,7 +13,7 @@ type t_typ =
 type tvar = {
     id : string;          (* variable name *)
     b_number : int;       (* block's number *)
-    typ: t_typ;           (* type *)
+    ty: t_typ;            (* type *)
     loc : Ast.loc;        (* location in code *)
   }
 
@@ -34,7 +34,8 @@ and tdesc =
   | TEnil
   | TEnew of t_typ  (* the function new is simulated on the go *)
   | TEident of tvar
-  | TEselect of texpr * string
+  | TEselect of texpr * string (* equivalent to C's "." *)
+  | TEselect_dref of texpr * string (* equivalent to C's "->" *)
   | TEcall of string * texpr list
   | TEprint of texpr list (* it does not survive as an expression, but only as a statement *)
   | TEunop of Ast.unop * texpr

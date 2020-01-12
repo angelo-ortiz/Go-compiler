@@ -46,8 +46,9 @@ let () =
     Pp.rtl_file programme;
     Format.printf "**  === RTL done ===  **\n\n";
     let programme = Ertl.file programme in
-    Pp.ertl_file programme
-    (* Ltl.file programme *)
+    Pp.ertl_file programme;
+    let programme = Ltl.file programme in
+    Pp.ltl_file programme
   with
   | Lexer.Lexing_error s ->
      report (lexeme_start_p lb, lexeme_end_p lb);

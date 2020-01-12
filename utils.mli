@@ -18,6 +18,8 @@ val incr_level : unit -> unit
 val decr_level : unit -> unit
 val position_of_loc : Ast.loc -> int * int * int
 val list_fst_rev : ('a  * 'b) list -> 'a list -> 'a list 
+val sub_list : 'a list -> int -> int -> 'a list
+val sum_of_list : int list -> int
 val check_package : Ast.expr -> string -> Ast.loc -> unit
 val check_int : string -> Ast.loc -> Big_int.big_int
 val check_neg_int : Ast.expr -> Ast.expr

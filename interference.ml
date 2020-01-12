@@ -14,6 +14,8 @@ let no_arcs = {
     intfs = Register.S.empty;
   }
 
+(* Arc = directed edge: tail (tl) -> head (hd) *)
+
 let degree_of v g =
   Register.S.cardinal (Register.M.find v g).intfs
 
@@ -64,21 +66,25 @@ let remove_node v arcs g =
 (** [merge_nodes v1 v2 g] merges v1 into v2, which must be linked by a preference edge **)
 let merge_nodes v1 v2 g =
   let g = remove_pref_arc v1 v2 g in
-  let arcs = Register.M.find v1 g in
-  let arcs = { arcs with prefs = Register.S.remove v2 arcs.prefs } in
+  let v2_arcs = Register.M.find v2 g in
+  let v1_arcs = Register.M.find v1 g in
+  let v1_arcs = { v1_arcs with prefs = Register.S.remove v2 v1_arcs.prefs } in
   let g =
     Register.S.fold (
-        fun w g ->
-        let g = replace_pref_arc v1 v2 w g in
-        add_pref_arc w v2 g
-      ) arcs.prefs g
+        fun w g -> (* add only non-conflicting preference arcs *)
+        if Register.S.mem w v2_arcs.intfs then remove_pref_arc v1 w g
+        else
+          let g = replace_pref_arc v1 v2 w g in
+          add_pref_arc w v2 g
+      ) v1_arcs.prefs g
   in
   let g =
     Register.S.fold (
         fun w g ->
+        let g = if Register.S.mem w v2_arcs.prefs then remove_pref_edge v2 w g else g in
         let g = replace_intf_arc v1 v2 w g in
         add_intf_arc w v2 g
-      ) arcs.intfs g
+      ) v1_arcs.intfs g
   in
   Register.M.remove v1 g
 
@@ -115,7 +121,7 @@ let build_graph info_map =
   
   let update _ info g =
     match info.instr with
-    | Embinop (Istree.Mmov, w, v, _) | Elea (w, v, _) ->
+    | Embinop (Istree.Mmov, w, v, _) ->
        let g = add_pref_edge v w g in
        let out_live = Register.S.remove v info.out_ in
        Register.S.fold (add_intf_edge v) (Register.S.remove w out_live) g

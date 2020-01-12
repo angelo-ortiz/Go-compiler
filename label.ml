@@ -5,7 +5,7 @@ let counter = ref 0
 
 let fresh () =
   incr counter;
-  Format.sprintf ".L%d" !counter
+  Format.sprintf "._L%d" !counter
 
 module M = Map.Make(String)
 

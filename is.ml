@@ -5,15 +5,34 @@ open Istree
 exception Found_offset of int
    
 let all_structs = ref Asg.Smap.empty
-   
-let rec size_of_type = function
+
+(* TODO: var "_" is NOT assignable since it's untyped and it would raise an AssertionError *)
+let rec _length_of_type fs = function
   | TTint | TTbool | TTstring | TTpointer _ ->
-     Utils.word_size
+     1
   | TTstruct s ->
-     let str = Smap.find s !all_structs in
-     List.fold_left (fun size (_, ty) -> size + size_of_type ty) 0 str.fields
-  | TTnil | TTunit | TTuntyped | TTtuple _ ->
+     fs s
+  | TTunit ->
+     0
+  | TTtuple tl ->
+     List.fold_left (fun len t -> len + _length_of_type fs t) 0 tl
+  | TTnil | TTuntyped ->
      assert false
+
+let length_of_struct =
+  let h = Hashtbl.create 16 in
+  let rec f s =
+    try Hashtbl.find h s
+    with Not_found ->
+      let str = Smap.find s !all_structs in
+      let len = List.fold_left (fun len (_, ty) -> len + _length_of_type f ty) 0 str.fields in
+      Hashtbl.add h s len;
+      len
+  in
+  f
+
+(* the number of 8-byte blocks *)
+let length_of_type = _length_of_type length_of_struct
 
 let struct_of_texpr = function
   | Asg.TTstruct str ->
@@ -27,67 +46,81 @@ let field_offset str fd =
     let _ = 
       List.fold_left
         (fun ofs (fd', ty) ->
-          if fd' = fd then raise (Found_offset ofs); ofs + size_of_type ty) 0 str.fields
+          if fd' = fd then raise (Found_offset ofs); ofs + length_of_type ty) 0 str.fields
     in assert false
   with Found_offset ofs -> ofs
      
 (* assert variable-name unicity*)
 let prepend_bnumber tvar =
   Format.sprintf "%d_%s" tvar.b_number tvar.id
+
+let expr_of_primitive e =
+  { length = 1; desc = e }
    
 let rec mk_add e1 e2 =
-  match e1, e2 with
+  match e1.desc, e2.desc with
   | IEint n1, IEint n2 ->
      IEint (Int32.add n1 n2)
   | e, IEint 0l | IEint 0l, e ->
      e
   | IEunop (Maddi n1, e), IEint n2 | IEint n2, IEunop (Maddi n1, e) ->
-     mk_add (IEint (Int32.add n1 n2)) e
-  | e, IEint n | IEint n, e ->
-     IEunop (Maddi n, e)
+     mk_add (expr_of_primitive (IEint (Int32.add n1 n2))) e
+  | _, IEint n ->
+     IEunop (Maddi n, e1)
+  | IEint n, _ ->
+     IEunop (Maddi n, e2)
   | _ ->
      IEbinop (Madd, e1, e2)
     
-let rec mk_neg = function
+let rec mk_neg e =
+  match e.desc with
   | IEint n ->
      IEint (Int32.neg n)
   | IEunop (Maddi n, e) ->
-     IEunop (Maddi (Int32.neg n), mk_neg e)
-  | _ as e ->
+     IEunop (Maddi (Int32.neg n), expr_of_primitive (mk_neg e))
+  | _ ->
      IEunop (Mneg, e)
     
-and  mk_sub e1 e2 =
-  match e1, e2 with
+and mk_sub e1 e2 =
+  match e1.desc, e2.desc with
   | IEint n1, IEint n2 ->
      IEint (Int32.sub n1 n2)
   | e, IEint 0l ->
      e
-  | IEint 0l, e ->
-     mk_neg e
+  | IEint 0l, _ ->
+     mk_neg e2
   | IEunop (Maddi n1, e), IEint n2 ->
-     mk_sub e (IEint (Int32.sub n2 n1)) 
+     mk_sub e (expr_of_primitive (IEint (Int32.sub n2 n1)))
   | IEint n2, IEunop (Maddi n1, e) ->
-     mk_sub (IEint (Int32.sub n2 n1)) e
-  | e, IEint n ->
-     IEunop (Maddi (Int32.neg n), e)
-  | IEint n, e ->
-     IEunop (Maddi n, mk_neg e)
+     mk_sub (expr_of_primitive (IEint (Int32.sub n2 n1))) e
+  | _, IEint n ->
+     IEunop (Maddi (Int32.neg n), e1)
+  | IEint n, _ ->
+     IEunop (Maddi n, expr_of_primitive (mk_neg e2))
   | _ ->
      IEbinop (Msub, e1, e2)
 
 let rec mk_mul e1 e2 =
-  match e1, e2 with
+  match e1.desc, e2.desc with
   | IEint n1, IEint n2 ->
      IEint (Int32.mul n1 n2)
   | IEunop (Mimuli n1, e), IEint n2 | IEint n2, IEunop (Mimuli n1, e) ->
-     mk_mul (IEint (Int32.mul n1 n2)) e
-  | e, IEint n | IEint n, e ->
-     IEunop (Mimuli n, e)
+     mk_mul (expr_of_primitive (IEint (Int32.mul n1 n2))) e
+  | e, IEint 1l | IEint 1l, e ->
+     e
+  | _, IEint -1l ->
+     IEunop (Mneg, e1)
+  | IEint -1l, _ ->
+     IEunop (Mneg, e2)
+  | _, IEint n ->
+     IEunop (Mimuli n, e1)
+  | IEint n, _ ->
+     IEunop (Mimuli n, e2)
   | _ ->
      IEbinop (Mimul, e1, e2)
 
 let rec mk_div e1 e2 =
-  match e1, e2 with
+  match e1.desc, e2.desc with
   | IEint n1, IEint n2 when n2 = 0l ->
      Utils.optimiser_error Utils.dummy_loc "division by zero"
   | IEint n1, IEint n2 ->
@@ -95,28 +128,29 @@ let rec mk_div e1 e2 =
   | e, IEint 1l ->
      e
   | IEunop (Midivil n1, e), IEint n2 ->
-     mk_div e (IEint (Int32.mul n1 n2))
-  | e, IEint n ->
-     IEunop (Midivil n, e)
-  | IEint n, e ->
-     IEunop (Midivir n, e)
+     mk_div e (expr_of_primitive (IEint (Int32.mul n1 n2)))
+  | _, IEint n ->
+     IEunop (Midivil n, e1)
+  | IEint n, _ ->
+     IEunop (Midivir n, e2)
   | _ ->
      IEbinop (Midiv, e1, e2)
 
 let rec mk_mod e1 e2 =
-  match e1, e2 with
+  match e1.desc, e2.desc with
   | IEint n1, IEint n2 when n2 = 0l ->
      Utils.optimiser_error Utils.dummy_loc "division by zero"
   | IEint n1, IEint n2 ->
      IEint (Int32.rem n1 n2)
-  | e, IEint n ->
-     IEunop (Mmodil n, e)
-  | IEint n, e ->
-     IEunop (Mmodir n, e)
+  | _, IEint n ->
+     IEunop (Mmodil n, e1)
+  | IEint n, _ ->
+     IEunop (Mmodir n, e2)
   | _ ->
      IEbinop (Mmod, e1, e2)
 
-let rec mk_not = function
+let rec mk_not e =
+  match e.desc with
   | IEbool b ->
      IEbool (not b)
   | IEunop (Msetei n, e) ->
@@ -144,14 +178,14 @@ let rec mk_not = function
   | IEbinop (Msetge, l, r) ->
      IEbinop (Msetl, l, r) 
   | IEand (l, r) ->
-     IEor (mk_not l, mk_not r)
+     IEor (expr_of_primitive (mk_not l), expr_of_primitive (mk_not r))
   | IEor (l, r) ->
-     IEand (mk_not l, mk_not r)
-  | _ as e ->
+     IEand (expr_of_primitive (mk_not l), expr_of_primitive (mk_not r))
+  | _ ->
      IEunop (Mnot, e)
 
 let mk_eq e1 e2 =
-  match e1, e2 with
+  match e1.desc, e2.desc with
   | IEbool b1, IEbool b2 ->
      IEbool (b1 = b2)
   | IEint n1, IEint n2 ->
@@ -160,106 +194,123 @@ let mk_eq e1 e2 =
      IEbool (s1 = s2)
   | IEaccess v1, IEaccess v2 when v1 = v2 ->
      IEbool true
-  | IEint n, e | e, IEint n ->
-     IEunop (Msetei n, e)
+  | _, IEint n ->
+     IEunop (Msetei n, e1)
+  | IEint n, _ ->
+     IEunop (Msetei n, e2)
   | _ ->
      IEbinop (Msete, e1, e2)
     
 let mk_lt e1 e2 =
-  match e1, e2 with
+  match e1.desc, e2.desc with
   | IEint n1, IEint n2 ->
      IEbool (n1 < n2)
   | IEaccess v1, IEaccess v2 when v1 = v2 ->
      IEbool false
-  | IEint n, e ->
-     IEunop (Msetgi n, e)
-  | e, IEint n ->
-     IEunop (Msetli n, e)
+  | _, IEint n ->
+     IEunop (Msetli n, e1)
+  | IEint n, _ ->
+     IEunop (Msetgi n, e2)
   | _ ->
      IEbinop (Msetl, e1, e2)
     
 let mk_le e1 e2 =
-  match e1, e2 with
+  match e1.desc, e2.desc with
   | IEint n1, IEint n2 ->
      IEbool (n1 <= n2)
   | IEaccess v1, IEaccess v2 when v1 = v2 ->
      IEbool true
-  | IEint n, e ->
-     IEunop (Msetgei n, e)
-  | e, IEint n ->
-     IEunop (Msetlei n, e)
+  | _, IEint n ->
+     IEunop (Msetlei n, e1)
+  | IEint n, _ ->
+     IEunop (Msetgei n, e2)
   | _ ->
      IEbinop (Msetle, e1, e2)
-    
+
 let rec expr e =
+  let length, desc = expr_desc e in
+  { length; desc }
+
+and expr_desc e =
   match e.tdesc with
   | TEint n ->
-     IEint (Int64.to_int32 n)
+     length_of_type e.typ, IEint (Int64.to_int32 n)
   | TEstring str ->
-     IEstring str
+     length_of_type e.typ, IEstring str
   | TEbool b ->
-     IEbool b
+     length_of_type e.typ, IEbool b
   | TEnil ->
-     IEnil
+     length_of_type e.typ, IEnil
   | TEnew ty ->
-     IEmalloc (size_of_type ty)
+     length_of_type e.typ, IEmalloc (Int32.of_int (Utils.word_size * length_of_type ty))
   | TEident tvar when tvar.id = "_" ->
-     IEaccess "_"
+     length_of_type e.typ, IEaccess "_"
   | TEident tvar ->
-     IEaccess (prepend_bnumber tvar)
+     length_of_type e.typ, IEaccess (prepend_bnumber tvar)
   | TEselect (str, fd) ->
+     length_of_type e.typ,
+     IEselect (expr str, Utils.word_size * field_offset (struct_of_texpr str.typ) fd)
+  | TEselect_dref (str, fd) ->
+     length_of_type e.typ,
      IEload (expr str, Utils.word_size * field_offset (struct_of_texpr str.typ) fd)
   | TEcall (f, actuals) ->
-     IEcall (f, List.map expr actuals)
-  | TEprint es ->
-     (* IEprint (List.map expr es) *)
+     length_of_type e.typ, IEcall (f, List.map expr actuals)
+  | TEprint es -> (* print only exists as a statement *)
      assert false
-  | TEunop (Ast.Unot, e) ->
-     mk_not (expr e)
-  | TEunop (Ast.Uneg, e) ->
-     mk_neg (expr e)
-  | TEunop (Ast.Udref, e) ->
-     IEunop (Mdref, expr e) (* TODO *)
-  | TEunop (Ast.Uaddr, e) ->
-     IEunop (Maddr, expr e) (* TODO *)
+  | TEunop (Ast.Unot, e') ->
+     length_of_type e.typ, mk_not (expr e')
+  | TEunop (Ast.Uneg, e') ->
+     length_of_type e.typ, mk_neg (expr e')
+  | TEunop (Ast.Udref, { tdesc = TEunop (Ast.Uaddr, e); typ; is_assignable; loc }) ->
+     expr_desc e
+  | TEunop (Ast.Udref, e') ->
+     length_of_type e.typ, IEload (expr e', 0)
+  | TEunop (Ast.Uaddr, { tdesc = TEunop (Ast.Udref, e); typ; is_assignable; loc }) ->
+     expr_desc e
+  | TEunop (Ast.Uaddr, e') ->
+     length_of_type e.typ, IEaddr (expr e')
   | TEbinop (Ast.Badd, l, r) ->
-     mk_add (expr l) (expr r)
+     length_of_type e.typ, mk_add (expr l) (expr r)
   | TEbinop (Ast.Bsub, l, r) ->
-     mk_sub (expr l) (expr r)
+     length_of_type e.typ, mk_sub (expr l) (expr r)
   | TEbinop (Ast.Bmul, l, r) ->
-     mk_mul (expr l) (expr r)
+     length_of_type e.typ, mk_mul (expr l) (expr r)
   | TEbinop (Ast.Bdiv, l, r) ->
-     mk_div (expr l) (expr r)
+     length_of_type e.typ, mk_div (expr l) (expr r)
   | TEbinop (Ast.Bmod, l, r) ->
-     mk_mod (expr l) (expr r)
+     length_of_type e.typ, mk_mod (expr l) (expr r)
   | TEbinop (Ast.Beq, l, r) ->
-     mk_eq (expr l) (expr r)
+     length_of_type e.typ, mk_eq (expr l) (expr r)
   | TEbinop (Ast.Bneq, l, r) ->
-     mk_not (mk_eq (expr l) (expr r))
+     length_of_type e.typ, mk_not (expr_of_primitive (mk_eq (expr l) (expr r)))
   | TEbinop (Ast.Blt, l, r) ->
-     mk_lt (expr l) (expr r)
+     length_of_type e.typ, mk_lt (expr l) (expr r)
   | TEbinop (Ast.Ble, l, r) ->
-     mk_le (expr l) (expr r)
+     length_of_type e.typ, mk_le (expr l) (expr r)
   | TEbinop (Ast.Bgt, l, r) ->
-     mk_not (mk_le (expr l) (expr r))
+     length_of_type e.typ, mk_not (expr_of_primitive (mk_le (expr l) (expr r)))
   | TEbinop (Ast.Bge, l, r) ->
-     mk_not (mk_lt (expr l) (expr r))
+     length_of_type e.typ, mk_not (expr_of_primitive (mk_lt (expr l) (expr r)))
   | TEbinop (Ast.Band, l, r) ->
-     IEand (expr l, expr r)
+     length_of_type e.typ, IEand (expr l, expr r)
   | TEbinop (Ast.Bor, l, r) ->
-     IEor (expr l, expr r)
+     length_of_type e.typ, IEor (expr l, expr r)
+
+let assign_desc = function
+  | IEaccess v ->
+     Avar v
+  | IEselect (str, fd) ->
+     Afield (str, fd)
+  | IEload (str, n) ->
+     Adref (str, n)
+  | IEint _ | IEstring _ | IEbool _ | IEnil | IEmalloc _
+  | IEcall _ |IEaddr _ | IEunop _ | IEbinop _ | IEand _ | IEor _ ->
+     assert false
 
 let assign e =
-  match e.tdesc with
-  | TEident tvar ->
-     Avar (prepend_bnumber tvar)
-  | TEselect (str, fd) ->
-     Afield (expr str, Utils.word_size * field_offset (struct_of_texpr str.typ) fd)
-  | TEunop (Ast.Udref, e) ->
-     Adref (expr e)
-  | TEint _ | TEstring _ | TEbool _ | TEnil | TEnew _
-  | TEcall _ | TEprint _ | TEunop _ | TEbinop _ ->
-     assert false
+  let { length; desc } = expr e in
+  let assignee = assign_desc desc in
+  { length; assignee }
 
 let rec stmt locals body = function
   | TSnop ->
@@ -272,9 +323,9 @@ let rec stmt locals body = function
   | TSprint (fmt, es) ->
      locals, ISprint (fmt, List.map expr es) :: body
   | TSincr e ->
-     locals, ISexpr (IEunop (Minc, expr e)) :: body
+     locals, ISexpr (expr_of_primitive (IEunop (Minc, expr e))) :: body
   | TSdecr e ->
-     locals, ISexpr (IEunop (Mdec, expr e)) :: body
+     locals, ISexpr (expr_of_primitive (IEunop (Mdec, expr e))) :: body
   | TSblock b ->
      block locals body b
   | TSif (cond, bif, belse) ->
@@ -284,12 +335,16 @@ let rec stmt locals body = function
   | TSassign (assigned_s, values) ->
      locals, ISassign (List.map assign assigned_s, List.map expr values) :: body
   | TSdeclare (vars, values) ->
-     (* Variable nitialisations are done at frame allocation *)
+     (* Variable initialisations are done at frame allocation *)
      if values = [] then locals, body
      else
        locals,
        ISassign (
-           List.map (fun v -> Avar (if v.id = "_" then "_" else  prepend_bnumber v)) vars,
+           List.map (fun v ->
+               let length = length_of_type v.ty in
+               let assignee = Avar (if v.id = "_" then "_" else  prepend_bnumber v) in
+               { length; assignee }
+             ) vars,
            List.map expr values
          ) :: body
   | TSreturn es ->
@@ -299,20 +354,29 @@ let rec stmt locals body = function
      locals, ISfor (expr cond, List.rev b_for) :: body
     
 and block locals body b =
-  let locals = Smap.fold (fun id tvar vs -> (prepend_bnumber tvar) :: vs) b.vars locals in
+  let locals = Smap.fold (fun id tvar vs ->
+                   (prepend_bnumber tvar, length_of_type tvar.ty) :: vs
+                 ) b.vars locals
+  in
   let locals, body =
     List.fold_left (fun (vs, st_s) st -> stmt vs st_s st) (locals, body) b.stmts
   in
   locals, body
-  
-let function_ (f:Asg.decl_fun) =
+
+let funct (f:Asg.decl_fun) =
+  let result_length = function
+    | TTunit ->
+       []
+    | TTtuple tl ->
+       List.map length_of_type tl
+    | _ as t ->
+       [ length_of_type t ]
+  in
   (* local vars at block 0 cannot have the same name as a formal parameter *)
-  let formals = List.map (fun (id, _) -> "0_" ^ id) f.formals in
-  let locals, body = block [] [] (match f.body with | Typed b -> b | Untyped _ -> assert false) in 
-  { formals; result = Utils.length_of_type f.rtype; locals = List.rev locals; body = List.rev body }
+  let formals = List.map (fun (id, ty) -> "0_" ^ id, length_of_type ty) f.formals in
+  let locals, body = block [] [] (match f.body with | Typed b -> b | Untyped _ -> assert false) in
+  { formals; result = result_length f.rtype; locals = List.rev locals; body = List.rev body }
   
 let file (file:Asg.tfile) =
   all_structs := file.structs;
-  let structs = Smap.map (fun str -> List.length str.fields) file.structs in
-  let functions = Smap.map function_ file.functions in
-  { structs; functions }
+  Smap.map funct file.functions

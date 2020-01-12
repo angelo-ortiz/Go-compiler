@@ -2,7 +2,8 @@ TODO
 ----
 1. (OK) Lexer
 1. (OK) Parser
-1. (OK) Semantic analyser
+1. Semantic analyser
+  * Fix print args
 1. Assembly-code producer
   * (OK) Sem -> IS translation
   * (OK) IS -> RTL translation

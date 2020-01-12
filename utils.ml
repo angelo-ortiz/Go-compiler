@@ -43,6 +43,23 @@ let rec list_fst_rev rem acc =
      List.rev acc
   | e :: rem ->
      list_fst_rev rem (fst e :: acc)
+
+let sub_list l start len =
+  let rec loop acc i n = function
+    | [] ->
+       if n = 0 then List.rev acc
+       else raise (Invalid_argument "")
+    | x :: l ->
+       if n = 0 then List.rev acc
+       else begin
+           if i < start then loop acc (succ i) n l
+           else loop (x :: acc) (succ i) (pred n) l
+         end
+  in
+  loop [] 0 len l
+
+let sum_of_list =
+  List.fold_left (+) 0
     
 let check_package pkg func func_loc =
   match pkg.desc with
@@ -166,7 +183,7 @@ let rec string_of_texpr fmt te =
      Format.fprintf fmt "new(%a)" string_of_type typ
   | TEident tvar ->
      Format.fprintf fmt "%s" tvar.id
-  | TEselect (struct_, field) ->
+  | TEselect (struct_, field) | TEselect_dref (struct_, field) ->
      Format.fprintf fmt "%a.%s" string_of_texpr struct_ field
   | TEcall (f, args) ->
      Format.fprintf fmt "%s()" f 
@@ -230,7 +247,7 @@ let single_texpr_compatible_types ty_ref ty_act loc f_msg =
      type_error loc (Format.asprintf "use of untyped nil")        
   | TTuntyped, _ | _, (TTunit | TTuntyped | TTtuple _) ->
      assert false
-  | t_f, t_a ->
+  | e_f, t_a ->
      type_error loc (f_msg ())
     
 let multi_texpr_compatible_types ty_ref (te_act:Asg.texpr) f_msg =
@@ -270,7 +287,7 @@ let rec scan_texpr env use_queue expr =
        with Not_found ->
          env, tvar.id :: use_queue
      end
-  | TEselect (str, _) ->
+  | TEselect (str, _) | TEselect_dref (str, _) ->
      scan_texpr env use_queue str
   | TEcall (_, actuals) ->
      scan_texpr_list env use_queue actuals
