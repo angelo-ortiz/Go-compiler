@@ -44,25 +44,6 @@ let register r =
   else if r = Register.r15 then X86_64.r15
   else assert false
 
-let low_byte_reg r =
-  if r = Register.rax then X86_64.al
-  else if r = Register.rbx then X86_64.bl
-  else if r = Register.rcx then X86_64.cl
-  else if r = Register.rdx then X86_64.dl
-  else if r = Register.rsi then X86_64.sil
-  else if r = Register.rdi then X86_64.dil
-  else if r = Register.rbp then X86_64.bpl
-  else if r = Register.rsp then X86_64.spl
-  else if r = Register.r8  then X86_64.r8b
-  else if r = Register.r9  then X86_64.r9b
-  else if r = Register.r10 then X86_64.r10b
-  else if r = Register.r11 then X86_64.r11b
-  else if r = Register.r12 then X86_64.r12b
-  else if r = Register.r13 then X86_64.r13b
-  else if r = Register.r14 then X86_64.r14b
-  else if r = Register.r15 then X86_64.r15b
-  else assert false
-
 let x_reg r =
   !% (register r)
 
