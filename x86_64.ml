@@ -263,6 +263,13 @@ let testw a b = ins "testw %a, %a" a () b ()
 let testl a b = ins "testl %a, %a" a () b ()
 let testq a b = ins "testq %a, %a" a () b ()
 
+let cmove  a b = ins "cmove %a, %a" a () b ()
+let cmovne a b = ins "cmovne %a, %a" a () b ()
+let cmovg  a b = ins "cmovg %a, %a" a () b ()
+let cmovge a b = ins "cmovge %a, %a" a () b ()
+let cmovl  a b = ins "cmovl %a, %a" a () b ()
+let cmovle a b = ins "cmovle %a, %a" a () b ()
+
 let sete  a = ins "sete %a" a ()
 let setne a = ins "setne %a" a ()
 let sets  a = ins "sets %a" a ()

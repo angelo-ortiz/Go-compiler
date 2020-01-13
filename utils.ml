@@ -7,7 +7,6 @@ open Lexing
 
 exception Syntax_error of Ast.loc * string
 exception Type_error of Ast.loc * string
-exception Optimiser_error of Ast.loc * string
 
 let red = "\027[31m"
 let yellow = "\027[33m"
@@ -24,9 +23,6 @@ let syntax_error loc msg =
 
 let type_error loc msg =
   raise (Type_error (loc, msg))
-
-let optimiser_error loc msg =
-  raise (Optimiser_error (loc, msg))
 
 let incr_level () = incr level
 let decr_level () = decr level
@@ -464,3 +460,35 @@ let prefix n l =
          loop (n-1) (x :: acc) l
   in
   loop n [] l
+
+let inv_ubranch = function
+  | Rtltree.Mjz ->
+     Rtltree.Mjnz
+  | Rtltree.Mjnz ->
+     Rtltree.Mjz
+  | Rtltree.Mjei n ->
+     Rtltree.Mjnei n
+  | Rtltree.Mjnei n ->
+     Rtltree.Mjei n
+  | Rtltree.Mjgi n ->
+     Rtltree.Mjlei n
+  | Rtltree.Mjgei n ->
+     Rtltree.Mjli n
+  | Rtltree.Mjli n ->
+     Rtltree.Mjgei n
+  | Rtltree.Mjlei n ->
+     Rtltree.Mjgi n
+
+let inv_bbranch = function
+  | Rtltree.Mje ->
+     Rtltree.Mjne
+  | Rtltree.Mjne ->
+     Rtltree.Mje
+  | Rtltree.Mjg ->
+     Rtltree.Mjle
+  | Rtltree.Mjge ->
+     Rtltree.Mjl
+  | Rtltree.Mjl ->
+     Rtltree.Mjge
+  | Rtltree.Mjle ->
+     Rtltree.Mjg

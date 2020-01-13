@@ -11,52 +11,52 @@ type info = {
     out_ : Register.set;
   }
 
-let perform_analysis g =
+let perform_analysis graph =
   
-  let def_use = function (* TODO: check unop/binop/mubranch/mbbranch individual ops s.t. idiv(l) *)
-    | Eint (_, r, _) | Estring (_, r, _) | Ebool (_, r, _)
-    | Eget_param (_, r, _) | Epop_param (r, _) ->
+  let def_use = function
+    | Iint (_, r, _) | Istring (_, r, _) | Ibool (_, r, _)
+    | Iget_param (_, r, _) | Ipop_param (r, _) ->
        Register.S.singleton r, Register.S.empty
-    | Elea_local (src, _, dst, _) | Elea (src, _, dst, _) | Eload (src, _, dst, _)
-    | Embinop (Mmov, src, dst, _) ->
+    | Ilea_local (src, _, dst, _) | Ilea (src, _, dst, _) | Iload (src, _, dst, _)
+    | Imbinop (Mmov, src, dst, _) ->
        Register.S.singleton dst, Register.S.singleton src
-    | Emunop (Istree.Midivil _, r, _) ->
-       assert (r = Register.rax);
-       let set = Register.S.add r (Register.S.singleton Register.rdx) in
+    | Iidiv_imm (_, _) ->
+       let set = Register.S.add Register.rax (Register.S.singleton Register.rdx) in
        set, set
-    | Emunop (_, r, _) ->
+    | Imunop (_, r, _) ->
        let set = Register.S.singleton r in
        set, set
-    | Embinop (Midiv, src, dst, _) ->
-       assert (dst = Register.rax);
-       let def = Register.S.add dst (Register.S.singleton Register.rdx) in
+    | Iidiv (src,  _) ->
+       let def = Register.S.add Register.rax (Register.S.singleton Register.rdx) in
        def, Register.S.add src def
-    | Embinop (_, src, dst, _) ->
+    | Imbinop (_, src, dst, _) ->
        let def = Register.S.singleton dst in
        def, Register.S.add src def
-    | Emubranch (_, r, _, _) | Epush_param (r, _) ->
+    | Imubranch (_, r, _, _) | Ipush_param (r, _) | Iset_result (r, _, _)
+    | Iinc_dec (_, r, _, _) ->
        Register.S.empty, Register.S.singleton r
-    | Estore (r1, r2, _, _) | Embbranch (_, r2, r1, _, _) ->
+    | Istore (r1, r2, _, _) | Imbbranch (_, r2, r1, _, _) ->
        Register.S.empty, Register.S.add r1 (Register.S.singleton r2)
-    | Egoto _ | Ealloc_frame _ | Efree_frame _ | Ealloc_stack _ | Efree_stack _ ->
+    | Igoto _ | Ialloc_frame _ | Ifree_frame _ | Ialloc_stack _ | Ifree_stack _ ->
        Register.S.empty, Register.S.empty
-    | Ecall (_, n_r_args, _) ->
+    | Icall (_, n_r_args, _) ->
        Register.S.of_list Register.caller_saved,
        Register.S.of_list (Utils.prefix n_r_args Register.parameters)
-    | Ereturn ->
+    | Ireturn ->
        Register.S.empty, Register.S.add Register.rax (Register.S.of_list Register.callee_saved)
   in
   
   let succ = function
-    | Eint (_, _, l) | Estring (_, _, l) | Ebool (_, _, l) | Elea_local (_, _, _, l)
-    | Elea (_, _, _, l) | Eload (_, _, _, l) | Estore (_, _, _, l) | Ecall (_, _, l)
-    | Emunop (_, _, l) | Embinop (_, _, _, l) | Egoto l | Ealloc_frame l
-    | Efree_frame l | Ealloc_stack (_, l) | Efree_stack (_, l) | Eget_param (_, _, l)
-    | Epop_param (_, l) | Epush_param (_, l) ->
+    | Iint (_, _, l) | Istring (_, _, l) | Ibool (_, _, l) | Ilea_local (_, _, _, l)
+    | Ilea (_, _, _, l) | Iload (_, _, _, l) | Istore (_, _, _, l) | Icall (_, _, l)
+    | Imunop (_, _, l) | Iidiv_imm (_, l) | Iidiv (_, l) | Iinc_dec (_, _, _, l)
+    | Imbinop (_, _, _, l) | Igoto l | Ialloc_frame l | Ifree_frame l | Ialloc_stack (_, l)
+    | Ifree_stack (_, l) | Iget_param (_, _, l) | Ipop_param (_, l) | Ipush_param (_, l)
+    | Iset_result (_, _, l) ->
        Label.S.singleton l
-    | Emubranch (_, _, l1, l2) | Embbranch (_, _, _, l1, l2) ->
+    | Imubranch (_, _, l1, l2) | Imbbranch (_, _, _, l1, l2) ->
        Label.S.add l1 (Label.S.singleton l2)
-    | Ereturn ->
+    | Ireturn ->
        Label.S.empty
   in
   
@@ -92,21 +92,21 @@ let perform_analysis g =
       ) info_map info_map  
   in
   
-  let initialise g =  
+  let initialise graph =  
     let info_map, set =
       Label.M.fold (
           fun l i (map, set) ->
           Label.M.add l (info_of_instr i) map, Label.S.add l set
-        ) g (Label.M.empty, Label.S.empty)
+        ) graph (Label.M.empty, Label.S.empty)
     in
     set_preds info_map, set
   in
   
-  let rec kildall (info_map, ws) =
-    if Label.S.is_empty ws then info_map
+  let rec kildall (info_map, working_set) =
+    if Label.S.is_empty working_set then info_map
     else begin
-        let l = Label.S.choose ws in
-        let ws = Label.S.remove l ws in
+        let l = Label.S.choose working_set in
+        let ws = Label.S.remove l working_set in
         let info = Label.M.find l info_map in
         let old_in_ = info.in_ in
         let out_ = out_vars info_map info.succ in
@@ -117,4 +117,4 @@ let perform_analysis g =
       end
   in
 
-  kildall (initialise g)
+  kildall (initialise graph)

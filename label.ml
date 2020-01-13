@@ -15,5 +15,8 @@ module S = Set.Make(String)
 
 type set = S.t
 
+let to_string l =
+  l
+
 let string_of_label fmt l =
   Format.fprintf fmt "%s" l

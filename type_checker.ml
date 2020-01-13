@@ -67,9 +67,8 @@ let rec format_by_type fmt te =
   | TTpointer typ ->
      print_exprs := te :: !print_exprs;
      Format.fprintf fmt "%%p"
-  | TTtuple tl ->
-     (* TODO *)
-     (* Format.fprintf fmt "%a" format_type_list tl *)
+  | TTtuple tl -> (* impossible to print the results of a multiple-return function *)
+     (* TODO: handle Print(f()) where f return multiple values *)
      assert false
   | TTnil | TTunit | TTuntyped ->
      assert false
@@ -375,6 +374,22 @@ let type_assigned_values env loc to_be_assigned values =
        Utils.type_error loc
          (Format.asprintf "assignment mismatch: %d variable(s) but %d value(s)" l_assigned l_values)
      
+let type_underscores to_be_assigned t_values =
+  let t_types =
+    match t_values with
+    | [{ tdesc; typ = TTtuple tl; is_assignable; loc }] ->
+       tl
+    | _ as vs ->
+       List.map (fun t_v -> t_v.typ) vs
+  in
+  List.map2 (fun t_e t ->
+      match t_e.tdesc with
+      | TEident tvar when tvar.id = "_" ->
+         { t_e with tdesc = TEident { tvar with ty = t } }
+      | _ ->
+         t_e
+    ) to_be_assigned t_types
+     
 let update_env env var_map = function
   | TSdeclare (var_list, values) ->
      List.fold_left
@@ -404,7 +419,14 @@ let rec type_shstmt env b_vars b_number = function
             Utils.type_error e.loc "undefined: fmt";
           used_fmt := true;
           let exprs = type_expr_list env el in
-          let printer fmt = List.iter (format_of_texpr fmt) in
+          let rec printer fmt = function
+            | [] ->
+               ()
+            | [x] ->
+               format_of_texpr fmt x
+            | x :: xs ->
+               Format.fprintf fmt "%a %a" format_of_texpr x printer xs
+          in
           let format = Format.asprintf "%a" printer exprs in
           let p_exprs = List.rev !print_exprs in
           print_exprs := [];
@@ -434,6 +456,7 @@ let rec type_shstmt env b_vars b_number = function
                           ) assigned_s in
      let loc = try (List.hd values).loc with Failure _ -> assert false in
      let t_values = type_assigned_values env loc t_assigned_s values in
+     let t_assigned_s = type_underscores t_assigned_s t_values in
      b_vars, TSassign (t_assigned_s, t_values)
   | Ast.Ideclare (vars, values) ->
      (* Behaviour in Go: this can also assign values provided at least one left var is new *)
@@ -601,10 +624,10 @@ let rec type_stmt env b_vars b_number = function
          | Some st ->
             type_block env body ~ending_stmt:(Ast.Sexec st) for_number
        in
-       let for_stmt = TSfor (t_cond, { vars = for_vars; stmts = for_stmts; number = for_number }) in
+       let for_block = TSfor (t_cond, { vars = for_vars; stmts = for_stmts; number = for_number }) in
        b_vars,
-       if outer_number = b_number then for_stmt
-       else TSblock { vars = outer_vars; stmts = t_init :: for_stmts; number = outer_number }
+       if outer_number = b_number then for_block
+       else TSblock { vars = outer_vars; stmts = t_init :: [for_block]; number = outer_number }
      end
     
 and type_block env stmts ?ending_stmt number =

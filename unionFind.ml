@@ -4,8 +4,8 @@ type 'a element = {
   }
                 
 and 'a link =
-  | Rep of 'a info
-  | Parent of 'a element
+  | Repr of 'a info      (* The element is a class representative *)
+  | Child of 'a element  (* The element is a child of its 'content' *)
 
 and 'a info = {
     mutable rank : int;
@@ -13,26 +13,35 @@ and 'a info = {
   }
     
 let fresh contents =
-  { link = Rep { rank = 0; contents } }
+  { link = Repr { rank = 0; contents } }
 
+let info_of_repr elt =
+  match elt.link with
+  | Repr i ->
+     i
+  | Child _ ->
+     assert false
+    
+(* When equally ranked, make [rep2] a child of [rep1] *)
 let link rep1 rep2 =
-  let info1 = match rep1.link with | Rep i -> i | Parent _ -> assert false in
-  let info2 = match rep2.link with | Rep i -> i | Parent _ -> assert false in
-  if info1.rank > info2.rank then
-    rep2.link <- Parent rep1
+  let info1 = info_of_repr rep1 in
+  let info2 = info_of_repr rep2 in
+  if info1.rank < info2.rank then
+    rep1.link <- Child rep2
   else begin
-      rep1.link <- Parent rep2;
+      rep2.link <- Child rep1;
+      info1.contents <- info2.contents;
       if info1.rank = info2.rank then
-        info2.rank <- info2.rank + 1
+        info1.rank <- succ info1.rank
   end
   
 let rec find elt =
   match elt.link with
-  | Rep _ ->
+  | Repr _ ->
      elt
-  | Parent p ->
+  | Child p ->
      let new_p = find p in
-     elt.link <- Parent new_p;
+     elt.link <- Child new_p;
      new_p
 
 let union elt1 elt2 =
@@ -40,3 +49,6 @@ let union elt1 elt2 =
   let rep2 = find elt2 in
   if rep1 <> rep2 then link rep1 rep2
 
+let contents elt =
+  let info = info_of_repr (find elt) in
+  info.contents

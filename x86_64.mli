@@ -299,6 +299,14 @@ val testw: [`W] operand -> [`W] operand -> text
 val testl: [`L] operand -> [`L] operand -> text
 val testq: [`Q] operand -> [`Q] operand -> text
 
+val cmove : [`Q] operand -> [`Q] operand -> text
+val cmovne: [`Q] operand -> [`Q] operand -> text
+val cmovg : [`Q] operand -> [`Q] operand -> text
+val cmovge: [`Q] operand -> [`Q] operand -> text
+val cmovl : [`Q] operand -> [`Q] operand -> text
+val cmovle: [`Q] operand -> [`Q] operand -> text
+  (** transferts conditionnels *)
+
 val sete : [`B] operand -> text  (* =  0 *)
 val setne: [`B] operand -> text  (* <> 0 *)
 val sets : [`B] operand -> text  (* <  0 *)

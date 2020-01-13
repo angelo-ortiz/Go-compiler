@@ -6,21 +6,24 @@ type label = Label.t
 type colour = Colouring.colour
 
 type instr =
-  | Eint of int32 * colour * label
-  | Estring of string * colour * label (* TODO: cf rtltree *)
-  | Ebool of bool * colour * label
-  | Elea of register * int * register * label (* src | offset | dst *)
-  | Eload of register * int * register * label (* src | offset | dst *)
-  | Estore of register * register * int * label (* src | dst | offset *)
-  | Ecall of string * int * label (* # args in regs *)
-  | Emunop of Istree.munop * colour * label
-  | Embinop of Istree.mbinop * colour * colour * label
-  | Emubranch of Rtltree.mubranch * colour * label * label (* true | false *)
-  | Embbranch of Rtltree.mbbranch * colour * colour * label * label (* 2nd arg | 1st arg *)
-  | Egoto of label
-  | Epush of colour * label
-  | Epop of register * label
-  | Ereturn
+  | Iint of int32 * colour * label
+  | Istring of string * register * label
+  | Ibool of bool * colour * label
+  | Ilea of register * int * register * label (* src | offset | dst *)
+  | Iload of register * int * register * label (* src | offset | dst *)
+  | Istore of register * register * int * label (* src | dst | offset *)
+  | Icall of string * label
+  | Imunop of Ertltree.munop * colour * label
+  | Iidiv_imm of int32 * label
+  | Iidiv of colour * label
+  | Iinc_dec of Rtltree.inc_dec * register * int * label (* src | offset *)
+  | Imbinop of Ertltree.mbinop * colour * colour * label
+  | Imubranch of Rtltree.mubranch * colour * label * label (* true | false *)
+  | Imbbranch of Rtltree.mbbranch * colour * colour * label * label (* 2nd arg | 1st arg *)
+  | Igoto of label
+  | Ipush of colour * label
+  | Ipop of register * label
+  | Ireturn
 
 type frame = {
     f_params : int; (* size of return address *)

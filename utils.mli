@@ -1,7 +1,6 @@
 
 exception Syntax_error of Ast.loc * string
 exception Type_error of Ast.loc * string
-exception Optimiser_error of Ast.loc * string
                       
 val red : string
 val yellow : string
@@ -13,7 +12,6 @@ val word_size : int
   
 val syntax_error : Ast.loc -> string -> 'a
 val type_error : Ast.loc -> string -> 'a
-val optimiser_error : Ast.loc -> string -> 'a
 val incr_level : unit -> unit
 val decr_level : unit -> unit
 val position_of_loc : Ast.loc -> int * int * int
@@ -41,3 +39,5 @@ val check_fun_return : Asg.decl_fun Asg.Smap.t -> unit
 val check_recursive_struct : Asg.decl_struct Asg.Smap.t -> unit
 val check_fun_main : (string * Ast.loc * Ast.vars list * Ast.typ list * Ast.block) list -> unit
 val prefix : int -> 'a list -> 'a list
+val inv_ubranch : Rtltree.mubranch -> Rtltree.mubranch
+val inv_bbranch : Rtltree.mbbranch -> Rtltree.mbbranch

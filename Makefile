@@ -1,12 +1,12 @@
-#CMO=asg.cmo utils.cmo lexer.cmo parser.cmo type_checker.cmo is.cmo rtl.cmo ertl.cmo main.cmo
-CMO=asg.cmo utils.cmo label.cmo register.cmo lexer.cmo parser.cmo type_checker.cmo is.cmo rtl.cmo ertl.cmo liveness.cmo interference.cmo colouring.cmo pretty_printer.cmo ltl.cmo pp.cmo main.cmo
+CMO=asg.cmo utils.cmo lexer.cmo parser.cmo type_checker.cmo \
+	label.cmo register.cmo is.cmo rtl.cmo ertl.cmo liveness.cmo interference.cmo colouring.cmo \
+	ltl.cmo x86_64.ml unionFind.ml branch.ml lin.ml main.cmo
 GENERATED=lexer.ml parser.ml parser.mli
 BIN=pgoc
 TEST=./test.sh
 FLAGS=
 
-all: $(BIN) test_typing
-	#cd tests && $(TEST) -all ../$(BIN)
+all: $(BIN) test_all
 
 .PHONY: test_syntax test_typing test_compil
 
@@ -19,8 +19,11 @@ test_typing: $(BIN)
 test_compil: $(BIN)
 	cd tests && $(TEST) -3 ../$(BIN)
 
+test_all: $(BIN)
+	cd tests && $(TEST) -all ../$(BIN)
+
 $(BIN): $(CMO)
-	ocamlc $(FLAGS) -o $(BIN) nums.cma $(CMO) #zarith.cma
+	ocamlc $(FLAGS) -o $(BIN) nums.cma $(CMO)
 
 .SUFFIXES: .mli .ml .cmi .cmo .mll .mly
 
@@ -40,24 +43,6 @@ clean:
 	rm -f *.cm[io] *.o *~ $(BIN) $(GENERATED) parser.automaton
 
 parser.ml: ast.cmi utils.cmi
-
-ltl.cmo: colouring.cmo
-
-colouring.cmo: interference.cmo
-
-interference.cmo: liveness.cmo
-
-livenesss.cmo: register.cmi label.cmi
-
-is.cmo: label.cmi register.cmi
-
-label.cmi: label.ml
-	ocamlc $(FLAGS) -c $<
-
-register.cmi: register.ml
-	ocamlc $(FLAGS) -c $<
-
-#type_checker.ml: asg.cmi
 
 .depend depend: $(GENERATED)
 	rm -f .depend

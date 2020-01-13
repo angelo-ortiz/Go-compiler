@@ -29,8 +29,6 @@ let report loc =
   let line, fst_char, last_char = Utils.position_of_loc loc in
   Format.eprintf "File \"%s\", line %d, characters %d-%d:\n" file line fst_char last_char
 
-let () = Printexc.record_backtrace true
-  
 let () =
   let ch = open_in file in
   let lb = Lexing.from_channel ch in
@@ -42,13 +40,13 @@ let () =
     if !type_only then exit 0;
     let programme = Is.file type_file in
     let programme = Rtl.file programme in
-    Format.printf "**  ====== RTL =====  **\n";
-    Pp.rtl_file programme;
-    Format.printf "**  === RTL done ===  **\n\n";
     let programme = Ertl.file programme in
-    Pp.ertl_file programme;
     let programme = Ltl.file programme in
-    Pp.ltl_file programme
+    let code = Lin.programme programme in
+    let ch = open_out (Filename.chop_suffix file ".go" ^ ".s") in
+    let fmt = Format.formatter_of_out_channel ch in
+    X86_64.print_program fmt code;
+    close_out ch
   with
   | Lexer.Lexing_error s ->
      report (lexeme_start_p lb, lexeme_end_p lb);
@@ -68,9 +66,6 @@ let () =
      Format.eprintf "%stype error%s: %s@." Utils.red Utils.close msg;
      exit 1
   | e ->
-     let msg = Printexc.to_string e
-     and stack = Printexc.get_backtrace () in
-     Printf.eprintf "there was an error: %s%s\n" msg stack;
      Format.eprintf "%sunrecognised error%s: %s%s%s@."
        Utils.red Utils.close Utils.blue (Printexc.to_string e) Utils.close;
      exit 2

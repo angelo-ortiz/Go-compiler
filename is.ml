@@ -6,7 +6,6 @@ exception Found_offset of int
    
 let all_structs = ref Asg.Smap.empty
 
-(* TODO: var "_" is NOT assignable since it's untyped and it would raise an AssertionError *)
 let rec _length_of_type fs = function
   | TTint | TTbool | TTstring | TTpointer _ ->
      1
@@ -16,7 +15,9 @@ let rec _length_of_type fs = function
      0
   | TTtuple tl ->
      List.fold_left (fun len t -> len + _length_of_type fs t) 0 tl
-  | TTnil | TTuntyped ->
+  | TTnil ->
+     1
+  | TTuntyped ->
      assert false
 
 let length_of_struct =
@@ -35,7 +36,7 @@ let length_of_struct =
 let length_of_type = _length_of_type length_of_struct
 
 let struct_of_texpr = function
-  | Asg.TTstruct str ->
+  | Asg.TTstruct str | Asg.TTpointer (Asg.TTstruct str) ->
      str
   | _ ->
      assert false
@@ -121,8 +122,8 @@ let rec mk_mul e1 e2 =
 
 let rec mk_div e1 e2 =
   match e1.desc, e2.desc with
-  | IEint n1, IEint n2 when n2 = 0l ->
-     Utils.optimiser_error Utils.dummy_loc "division by zero"
+  | IEint n1, IEint n2 when n2 = 0l -> (* it will be a running-time error *)
+     IEunop (Midivil n2, e1)
   | IEint n1, IEint n2 ->
      IEint (Int32.div n1 n2)
   | e, IEint 1l ->
@@ -138,8 +139,8 @@ let rec mk_div e1 e2 =
 
 let rec mk_mod e1 e2 =
   match e1.desc, e2.desc with
-  | IEint n1, IEint n2 when n2 = 0l ->
-     Utils.optimiser_error Utils.dummy_loc "division by zero"
+  | IEint n1, IEint n2 when n2 = 0l -> (* it will be a running-time error *)
+     IEunop (Mmodil n2, e1)
   | IEint n1, IEint n2 ->
      IEint (Int32.rem n1 n2)
   | _, IEint n ->
