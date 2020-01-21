@@ -134,7 +134,7 @@ let instr colours frame = function
   | Ertltree.Ireturn ->
      Ireturn
 
-let funct (f:Ertltree.decl_fun) =
+let funct (f:Ertltree.efundef) =
   let live = Liveness.perform_analysis f.body in
   let intf_graph = Interference.build_graph live in
   let colours, n_locals = Colouring.alloc_registers Register.allocable f.stored_locals intf_graph in
@@ -147,5 +147,5 @@ let funct (f:Ertltree.decl_fun) =
   graph := Label.M.empty;
   { entry = f.entry; body }
   
-let file =
+let programme =
   Asg.Smap.map funct

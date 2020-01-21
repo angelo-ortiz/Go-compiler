@@ -24,6 +24,7 @@ and idesc =
   | IEstring of string
   | IEbool of bool
   | IEnil
+  | IElist of iexpr list
   | IEmalloc of int32
   | IEaccess of ident
   | IEselect of iexpr * int (* C's "." *)
@@ -54,11 +55,11 @@ type istmt =
   | ISreturn of iexpr list
   | ISfor of iexpr * istmt list
 
-type idecl_fun = {
+type ifundef = {
     formals : (ident * int) list;
     result : int list; (* list of results' size in 8-byte blocks *)
     locals : (ident * int) list;
     body: istmt list;
   }
          
-type ifile = idecl_fun Asg.smap
+type iprogramme = ifundef Asg.smap

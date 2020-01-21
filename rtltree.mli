@@ -1,9 +1,6 @@
 
 (* Register transfer language grammar *)
 
-type register = Register.t
-type label = Label.t
-
 type mubranch =
   | Mjz | Mjnz | Mjei of int32 | Mjnei of int32
   | Mjgi of int32 | Mjgei of int32 | Mjli of int32 | Mjlei of int32
@@ -14,34 +11,34 @@ type mbbranch =
 type inc_dec =
   | IDinc | IDdec
 
-type instr =
-  | Iint of int32 * register * label
-  | Istring of string * register * label
-  | Ibool of bool * register * label
-  | Imalloc of register * int32 * label
-  | Ilea_local of register list * int * register * label (* local register | offset | dst *)
-  | Ilea of register * int * register * label (* src | offset | dst *)
-  | Iload of register list * int * register list * label (* src | offset | dst *)
-  | Istore of register * register * int * label (* src | dst | offset *)
-  | Icall of register list * string * register list * label (* results | name | args *)
-  | Iprint of register list * label (* expressions *)
-  | Imunop of Istree.munop * register * label
-  (* | Iinc_dec_local of inc_dec * register list * int * label (\* local register | offset *\) *)
-  | Iinc_dec of inc_dec * register * int * label (* src/dst | offset *)
-  | Imbinop of Istree.mbinop * register * register * label
-  | Imubranch of mubranch * register * label * label (* true | false *)
-  | Imbbranch of mbbranch * register * register * label * label (* 2nd arg | 1st arg *)
-  | Igoto of label
+type rinstr =
+  | Iint of int32 * Register.t * Label.t
+  | Istring of string * Register.t * Label.t
+  | Ibool of bool * Register.t * Label.t
+  | Imalloc of Register.t * int32 * Label.t
+  | Ilea_local of Register.t list * int * Register.t * Label.t (* local Register.t | offset | dst *)
+  | Ilea of Register.t * int * Register.t * Label.t (* src | offset | dst *)
+  | Iload of Register.t list * int * Register.t list * Label.t (* src | offset | dst *)
+  | Istore of Register.t * Register.t * int * Label.t (* src | dst | offset *)
+  | Icall of Register.t list * string * Register.t list * Label.t (* results | name | args *)
+  | Iprint of Register.t list * Label.t (* expressions *)
+  | Imunop of Istree.munop * Register.t * Label.t
+  (* | Iinc_dec_local of inc_dec * Register.t list * int * Label.t (\* local Register.t | offset *\) *)
+  | Iinc_dec of inc_dec * Register.t * int * Label.t (* src/dst | offset *)
+  | Imbinop of Istree.mbinop * Register.t * Register.t * Label.t
+  | Imubranch of mubranch * Register.t * Label.t * Label.t (* true | false *)
+  | Imbbranch of mbbranch * Register.t * Register.t * Label.t * Label.t (* 2nd arg | 1st arg *)
+  | Igoto of Label.t
 
-type graph = instr Label.map
+type graph = rinstr Label.map
 
-type decl_fun = {
-    formals : register list;
-    result : register list;
+type rfundef = {
+    formals : Register.t list;
+    result : Register.t list;
     locals : Register.set;
-    entry : label;
-    exit_ : label;
-    body : instr Label.map;
+    entry : Label.t;
+    exit_ : Label.t;
+    body : rinstr Label.map;
   }
 
-type file = decl_fun Asg.smap
+type rprogramme = rfundef Asg.smap

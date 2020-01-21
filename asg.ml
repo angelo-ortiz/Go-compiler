@@ -1,4 +1,7 @@
 
+(* Abstract semantic graph *)
+(* Typing grammar *) 
+
 type t_typ =
   | TTint
   | TTstring
@@ -64,19 +67,19 @@ type fblock =
   | Untyped of Ast.block
   | Typed of tblock
            
-type decl_struct = {
+type tstrdef = {
     fields : (string * t_typ) list;  (* list of (field, type) *)
     loc : Ast.loc;                   (* declaration locus *)
   }
                  
-type decl_fun = {
+type tfundef = {
     formals: (string * t_typ) list;  (* list of (formal, type)*)
     rtype : t_typ;                   (* return type *)
     body : fblock;                   (* body *)
     loc : Ast.loc;                   (* declaration locus *)
   }
          
-type tfile = {
-    structs : decl_struct smap;
-    functions : decl_fun smap;
+type tprogramme = {
+    structs : tstrdef smap;
+    functions : tfundef smap;
   }

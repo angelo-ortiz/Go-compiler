@@ -1,53 +1,50 @@
 
 (* Explicit register transfer language grammar *)
 
-type register = Register.t
-type label = Label.t
-
-type munop =
+type emunop =
   | Mnot | Mneg | Maddi of int32 | Mimuli of int32 | Minc | Mdec
   | Msetei of int32 | Msetnei of int32 | Msetgi of int32 | Msetgei of int32
   | Msetli of int32 | Msetlei of int32
 
-type mbinop =
+type embinop =
   | Madd | Msub | Mimul | Mxor
   | Msete | Msetne | Msetg | Msetge | Msetl | Msetle
   | Mmov
            
-type instr =
-  | Iint of int32 * register * label
-  | Istring of string * register * label
-  | Ibool of bool * register * label
-  | Ilea_local of register * int * register * label (* local register | offset | dst *)
-  | Ilea of register * int * register * label (* src | offset | dst *)
-  | Iload of register * int * register * label (* src | offset | dst *)
-  | Istore of register * register * int * label (* src | dst | offset *)
-  | Icall of string * int * label (* # args in regs *)
-  | Imunop of munop * register * label
-  | Iidiv_imm of int32 * label
-  | Iidiv of register * label
-  (* | Iinc_dec_local of Rtltree.inc_dec * register list * int * label (\* local register | offset *\) *)
-  | Iinc_dec of Rtltree.inc_dec * register * int * label (* src | offset *)
-  | Imbinop of mbinop * register * register * label
-  | Imubranch of Rtltree.mubranch * register * label * label (* true | false *)
-  | Imbbranch of Rtltree.mbbranch * register * register * label * label (* 2nd arg | 1st arg *)
-  | Igoto of label
-  | Ialloc_frame of label
-  | Ifree_frame of label
-  | Iget_param of int * register * label
-  | Iset_result of register * int * label
-  | Ipush_param of register * label
-  | Ipop_param of register * label
-  | Ialloc_stack of int32 * label
-  | Ifree_stack of int32 * label
+type einstr =
+  | Iint of int32 * Register.t * Label.t
+  | Istring of string * Register.t * Label.t
+  | Ibool of bool * Register.t * Label.t
+  | Ilea_local of Register.t * int * Register.t * Label.t (* local Register.t | offset | dst *)
+  | Ilea of Register.t * int * Register.t * Label.t (* src | offset | dst *)
+  | Iload of Register.t * int * Register.t * Label.t (* src | offset | dst *)
+  | Istore of Register.t * Register.t * int * Label.t (* src | dst | offset *)
+  | Icall of string * int * Label.t (* # args in regs *)
+  | Imunop of emunop * Register.t * Label.t
+  | Iidiv_imm of int32 * Label.t
+  | Iidiv of Register.t * Label.t
+  (* | Iinc_dec_local of Rtltree.inc_dec * Register.t list * int * Label.t (\* local Register.t | offset *\) *)
+  | Iinc_dec of Rtltree.inc_dec * Register.t * int * Label.t (* src | offset *)
+  | Imbinop of embinop * Register.t * Register.t * Label.t
+  | Imubranch of Rtltree.mubranch * Register.t * Label.t * Label.t (* true | false *)
+  | Imbbranch of Rtltree.mbbranch * Register.t * Register.t * Label.t * Label.t (* 2nd arg | 1st arg *)
+  | Igoto of Label.t
+  | Ialloc_frame of Label.t
+  | Ifree_frame of Label.t
+  | Iget_param of int * Register.t * Label.t
+  | Iset_result of Register.t * int * Label.t
+  | Ipush_param of Register.t * Label.t
+  | Ipop_param of Register.t * Label.t
+  | Ialloc_stack of int32 * Label.t
+  | Ifree_stack of int32 * Label.t
   | Ireturn
 
-type decl_fun = {
+type efundef = {
     formals : int;
     locals : Register.set;
-    stored_locals : register list list;
-    entry : label;
-    body : instr Label.map;
+    stored_locals : Register.t list list;
+    entry : Label.t;
+    body : einstr Label.map;
   }
 
-type file = decl_fun Asg.smap
+type eprogramme = efundef Asg.smap

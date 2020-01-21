@@ -220,7 +220,7 @@ let fun_exit saved retrs exitl =
   let l = move_return_def l retrs in
   graph := Label.M.add exitl (Igoto l) !graph
   
-let funct (f:Rtltree.decl_fun) =
+let funct (f:Rtltree.rfundef) =
   Label.M.iter (fun l i -> let i = instr i in graph := Label.M.add l i !graph) f.body; 
   let saved = List.map (fun r -> Register.fresh (), r) Register.callee_saved in
   let n_res = List.length f.result in
@@ -234,5 +234,5 @@ let funct (f:Rtltree.decl_fun) =
   mem_locals := [];
   { formals = List.length f.formals; locals = f.locals; stored_locals; entry; body }
     
-let file =
+let programme =
   Asg.Smap.map funct

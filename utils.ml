@@ -54,6 +54,16 @@ let sub_list l start len =
   in
   loop [] 0 len l
 
+let flatten l =
+  let rec loop acc = function
+    | [], [] ->
+       acc
+    | x :: l, rem ->
+       loop ([x] :: acc) (l, rem)
+    | [], l :: rem ->
+       loop acc (l, rem)
+  in loop [] ([], l)
+
 let sum_of_list =
   List.fold_left (+) 0
     

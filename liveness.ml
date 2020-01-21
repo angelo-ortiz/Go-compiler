@@ -2,7 +2,7 @@
 open Ertltree
 
 type info = {
-    instr : Ertltree.instr;
+    instr : Ertltree.einstr;
     def : Register.set;
     use : Register.set;
     succ : Label.set;

@@ -33,16 +33,16 @@ let () =
   let ch = open_in file in
   let lb = Lexing.from_channel ch in
   try
-    let ast_file = Parser.file Lexer.next_token lb in
+    let p = Parser.file Lexer.next_token lb in
     close_in ch;
     if !parse_only then exit 0;
-    let type_file = Type_checker.type_file ast_file in
+    let p = Type_checker.programme p in
     if !type_only then exit 0;
-    let programme = Is.file type_file in
-    let programme = Rtl.file programme in
-    let programme = Ertl.file programme in
-    let programme = Ltl.file programme in
-    let code = Lin.programme programme in
+    let p = Is.programme p in
+    let p = Rtl.programme p in
+    let p = Ertl.programme p in
+    let p = Ltl.programme p in
+    let code = Lin.programme p in
     let ch = open_out (Filename.chop_suffix file ".go" ^ ".s") in
     let fmt = Format.formatter_of_out_channel ch in
     X86_64.print_program fmt code;

@@ -57,7 +57,34 @@ let prepend_bnumber tvar =
 
 let expr_of_primitive e =
   { length = 1; desc = e }
-   
+
+let default_value ty =
+  let rec loop (acc, size) ty =
+    match ty with 
+    | TTint ->
+       let length = length_of_type ty in
+       { length; desc = IEint 0l } :: acc, size + length
+    | TTstring ->
+       let length = length_of_type ty in
+       { length; desc = IEstring "" } :: acc, size + length
+    | TTbool ->
+       let length = length_of_type ty in
+       { length; desc = IEbool false } :: acc, size + length
+    | TTstruct str ->
+       let str = Asg.Smap.find str !all_structs in
+       List.fold_left loop (acc, size) (List.map snd str.fields)
+    | TTpointer _ ->
+       let length = length_of_type ty in
+       { length; desc = IEnil }:: acc, size + length
+    | TTnil | TTunit | TTuntyped | TTtuple _ ->
+       assert false
+  in
+  match loop ([], 0) ty with
+  | [e], _ ->
+     e
+  | _ as l, length -> (* l is reversed *)
+     { length; desc = IElist l }
+    
 let rec mk_add e1 e2 =
   match e1.desc, e2.desc with
   | IEint n1, IEint n2 ->
@@ -250,7 +277,7 @@ and expr_desc e =
      length_of_type e.typ, IEaccess (prepend_bnumber tvar)
   | TEselect (str, fd) ->
      length_of_type e.typ,
-     IEselect (expr str, Utils.word_size * field_offset (struct_of_texpr str.typ) fd)
+     IEselect (expr str, field_offset (struct_of_texpr str.typ) fd)
   | TEselect_dref (str, fd) ->
      length_of_type e.typ,
      IEload (expr str, Utils.word_size * field_offset (struct_of_texpr str.typ) fd)
@@ -305,7 +332,7 @@ let assign_desc = function
   | IEload (str, n) ->
      Adref (str, n)
   | IEint _ | IEstring _ | IEbool _ | IEnil | IEmalloc _
-  | IEcall _ |IEaddr _ | IEunop _ | IEbinop _ | IEand _ | IEor _ ->
+  | IEcall _ |IEaddr _ | IEunop _ | IEbinop _ | IEand _ | IEor _ | IElist _ ->
      assert false
 
 let assign e =
@@ -336,8 +363,15 @@ let rec stmt locals body = function
   | TSassign (assigned_s, values) ->
      locals, ISassign (List.map assign assigned_s, List.map expr values) :: body
   | TSdeclare (vars, values) ->
-     (* Variable initialisations are done at frame allocation *)
-     if values = [] then locals, body
+     if values = [] then
+       locals, List.fold_right (fun v acc ->
+                   if v.id = "_" then acc
+                   else begin
+                       let length = length_of_type v.ty in
+                       let assignee = Avar (prepend_bnumber v) in
+                       ISassign ([{ length; assignee }], [default_value v.ty]) :: acc
+                     end
+                 ) vars body
      else
        locals,
        ISassign (
@@ -364,7 +398,7 @@ and block locals body b =
   in
   locals, body
 
-let funct (f:Asg.decl_fun) =
+let funct (f:Asg.tfundef) =
   let result_length = function
     | TTunit ->
        []
@@ -378,6 +412,6 @@ let funct (f:Asg.decl_fun) =
   let locals, body = block [] [] (match f.body with | Typed b -> b | Untyped _ -> assert false) in
   { formals; result = result_length f.rtype; locals = List.rev locals; body = List.rev body }
   
-let file (file:Asg.tfile) =
-  all_structs := file.structs;
-  Smap.map funct file.functions
+let programme p =
+  all_structs := p.structs;
+  Smap.map funct p.functions

@@ -44,6 +44,25 @@ let register r =
   else if r = Register.r15 then X86_64.r15
   else assert false
 
+let low_byte_reg r =
+  if r = Register.rax then X86_64.al
+  else if r = Register.rbx then X86_64.bl
+  else if r = Register.rcx then X86_64.cl
+  else if r = Register.rdx then X86_64.dl
+  else if r = Register.rsi then X86_64.sil
+  else if r = Register.rdi then X86_64.dil
+  else if r = Register.rbp then X86_64.bpl
+  else if r = Register.rsp then X86_64.spl
+  else if r = Register.r8  then X86_64.r8b
+  else if r = Register.r9  then X86_64.r9b
+  else if r = Register.r10 then X86_64.r10b
+  else if r = Register.r11 then X86_64.r11b
+  else if r = Register.r12 then X86_64.r12b
+  else if r = Register.r13 then X86_64.r13b
+  else if r = Register.r14 then X86_64.r14b
+  else if r = Register.r15 then X86_64.r15b
+  else assert false
+
 let x_reg r =
   !% (register r)
 
@@ -76,8 +95,10 @@ let ubranch br c2 j_l =
     | Rtltree.Mjlei n ->
        n, jle
   in
-  cmpq (imm32 n1) (operand c2) ++
-  x_br (Label.to_string j_l)
+  let c2_op = operand c2 in
+  if n1 = 0l then testq c2_op c2_op
+  else cmpq (imm32 n1) c2_op;
+  ++ x_br (Label.to_string j_l)
 
 let bbranch br c1 c2 j_l =
   let x_br = 
@@ -96,58 +117,57 @@ let bbranch br c1 c2 j_l =
        jle
   in
   cmpq (operand c1) (operand c2) ++
-    x_br (Label.to_string j_l)
+  x_br (Label.to_string j_l)
 
-let x_tmp1 = x_reg Register.tmp1
-let x_tmp2 = x_reg Register.tmp2
+let q_tmp1 = x_reg Register.tmp1
+let b_tmp1 = !% (low_byte_reg Register.tmp1) 
+let q_tmp2 = x_reg Register.tmp2
 
 let uset op c =
-  let cond_mov, n = 
+  let setb, n = 
     match op with
     | Ertltree.Msetei n ->
-       cmove, n
+       sete, n
     | Ertltree.Msetnei n ->
-       cmovne, n
+       setne, n
     | Ertltree.Msetgi n ->
-       cmovg, n
+       setg, n
     | Ertltree.Msetgei n ->
-       cmovge, n
+       setge, n
     | Ertltree.Msetli n ->
-       cmovl, n
+       setl, n
     | Ertltree.Msetlei n ->
-       cmovle, n
+       setle, n
     | _ ->
        assert false
   in
-  movq      c x_tmp1 ++
-  movq      (imm32 0l) c ++
-  movq      (imm32 1l) x_tmp2 ++
-  cmpq      (imm32 n) x_tmp1 ++
-  cond_mov  x_tmp2 c
+  cmpq   (imm32 n) c ++
+  setb   b_tmp1 ++
+  movzbq b_tmp1 (register Register.tmp1) ++
+  movq   q_tmp1 c
   
 let bset op c1 c2 =
-  let cond_mov = 
+  let setb = 
     match op with
     | Ertltree.Msete ->
-       cmove
+       sete
     | Ertltree.Msetne ->
-       cmovne
+       setne
     | Ertltree.Msetg ->
-       cmovg
+       setg
     | Ertltree.Msetge ->
-       cmovge
+       setge
     | Ertltree.Msetl ->
-       cmovl
+       setl
     | Ertltree.Msetle ->
-       cmovle
+       setle
     | _ ->
        assert false
   in
-  movq     c2 x_tmp1 ++
-  movq     (imm32 0l) c2 ++
-  movq     (imm32 1l) x_tmp2 ++
-  cmpq     c1 x_tmp1 ++
-  cond_mov x_tmp2 c2
+  cmpq   c1 c2 ++
+  setb   b_tmp1 ++
+  movzbq b_tmp1 (register Register.tmp1) ++
+  movq   q_tmp1 c2
   
 let rec lin graph l =
   if not (Hashtbl.mem visited l) then begin
@@ -167,7 +187,16 @@ and instr graph l = function
      emit l (leaq (lab s_lab) (register r));
      lin graph next_l
   | Ibool (b, c, next_l) ->
-     emit l (movq (imm32 1l) (operand c));
+     let inst =
+       match c with 
+       | Reg mr when not b ->
+          let c' = x_reg mr in
+          xorq c' c'
+       | _ ->
+          let n = if b then 1l else 0l in
+          movq (imm32 n) (operand c)
+     in
+     emit l inst;
      lin graph next_l
   | Ilea (src, ofs, dst, next_l) ->
      emit l (leaq (ind ~reg:src ofs) (register dst));
@@ -202,8 +231,8 @@ and instr graph l = function
           emit l (uset op c_op)
      end;
      lin graph next_l
-  | Iidiv_imm (n, next_l) ->
-     emit l (movq (imm32 n) x_tmp1 ++ cqto ++ idivq x_tmp1);
+  | Iidiv_imm (n, next_l) -> (* idiv does not take immediate values *)
+     emit l (movq (imm32 n) q_tmp1 ++ cqto ++ idivq q_tmp1);
      lin graph next_l
   | Iidiv (c, next_l) ->
      emit l (cqto ++ idivq (operand c));

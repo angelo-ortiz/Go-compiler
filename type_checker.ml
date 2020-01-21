@@ -7,8 +7,8 @@ open Asg
  *** 2+ -> list of tau 
  *)
 
-let struct_env : Asg.decl_struct Smap.t ref = ref Smap.empty
-let func_env : Asg.decl_fun Smap.t ref = ref Smap.empty
+let struct_env = ref Smap.empty
+let func_env = ref Smap.empty
 let import_fmt = ref false
 let used_fmt = ref false
 (* used for block enumeration *)
@@ -91,7 +91,9 @@ let format_by_type_main fmt te =
      Format.fprintf fmt "&{%a}" format_by_type_list (List.map field_to_texpr fields)
   | _ ->
      format_by_type fmt te
-
+    
+(* TODO: move this to ertl: print '->' fields iff not nil *)
+(* unify the strings: union-find *)
 let format_of_texpr fmt te =
   match te.tdesc with
   | TEint n ->
@@ -722,7 +724,7 @@ let type_fun_body (name, _, _, _, _) =
   let tbody = Typed { vars; stmts; number = b_number } in
   func_env := Smap.add name { func with body = tbody } !func_env
 
-let type_file file =
+let programme file =
   import_fmt := fst file.Ast.import;
   let import_loc = snd file.Ast.import in
   let structs, functions = identify_declarations [] [] file.Ast.decls in

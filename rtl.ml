@@ -107,7 +107,7 @@ let rec expr destrs e destl =
   | IEaddr { length; desc = IEselect (str, n) } ->
      let rxs = multi_fresh_int str.length in
      expr rxs str (generate (
-     Ilea_local (rxs, n, List.hd destrs, destl)))
+     Ilea_local (rxs, Utils.word_size * n, List.hd destrs, destl)))
   | IEaddr { length; desc = IEload (str, n) } ->
      let tmps = multi_fresh_int str.length in
      expr tmps str (generate (
@@ -142,6 +142,8 @@ let rec expr destrs e destl =
      let true_l = generate (Ibool (true, List.hd destrs, destl))  in
      let false_l = expr destrs e2 destl in
      condition e1 true_l false_l
+  | IElist _ -> (* used only in assignments *)
+     assert false
 
 and condition e true_l false_l =
   match e.desc with
@@ -254,10 +256,15 @@ let rec stmt retrs s exitl destl =
      condition e
        (block retrs bif exitl destl)
        (block retrs belse exitl destl)
-  | ISassign (vars, [{ length; desc = IEcall (f, actuals) } as e]) ->
+  | ISassign (vars, [{ length; desc = IEcall _ } as e]) ->
      let srcrs = List.map (fun v -> multi_fresh_int v.length) vars in
      let l = List.fold_right2 assign srcrs vars destl in
      expr (List.flatten srcrs) e l
+  | ISassign (vars, [{ length; desc = IElist values }]) ->
+     let srcrs = List.map (fun v -> multi_fresh_int v.length) vars in
+     let l = List.fold_right2 assign srcrs vars destl in
+     let srcrs = Utils.flatten srcrs in
+     List.fold_left2 (fun l src e -> expr src e l) l srcrs values
   | ISassign (vars, values) ->
      let srcrs = List.map (fun (v:Istree.iexpr) -> multi_fresh_int v.length) values in
      let l = List.fold_right2 assign srcrs vars destl in
@@ -275,7 +282,7 @@ let rec stmt retrs s exitl destl =
 and block retr b exitl destl =
   List.fold_right (fun st dlab -> stmt retr st exitl dlab) b destl
   
-let funct (f:Istree.idecl_fun) =
+let funct (f:Istree.ifundef) =
   let r_formals = List.map (fun (_, n) -> multi_fresh_int n) f.formals in
   List.iter2 (fun (v, _) rs -> Hashtbl.add locals v rs) f.formals r_formals; 
   let result = List.map (fun len -> multi_fresh_int len) f.result in
@@ -295,9 +302,9 @@ let funct (f:Istree.idecl_fun) =
   { formals = List.flatten r_formals; result = List.flatten result;
     locals = local_vars; entry; exit_; body } 
   
-let file (f:Istree.ifile) =
-  let add_retrs f (decl:Istree.idecl_fun) acc =
-    (f, (List.map snd decl.formals, decl.result)) :: acc
+let programme p =
+  let add_retrs f (def:Istree.ifundef) acc =
+    (f, (List.map snd def.formals, def.result)) :: acc
   in
-  number_formals_results := Asg.Smap.fold add_retrs f []; 
-  Asg.Smap.map funct f
+  number_formals_results := Asg.Smap.fold add_retrs p []; 
+  Asg.Smap.map funct p
