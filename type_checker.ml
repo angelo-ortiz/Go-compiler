@@ -62,13 +62,14 @@ let rec format_by_type fmt te =
   | TTstruct str ->
      let fields = (Smap.find str !struct_env).fields in
      let is_assignable, loc = te.is_assignable, te.loc in
-     let field_to_texpr (fd, typ) = { tdesc = TEselect (te, fd); typ; is_assignable; loc } in
+     let field_to_texpr (fd, typ) = { tdesc = TEselect (te, fd); typ; is_assignable; loc }
+     in
      Format.fprintf fmt "{%a}" format_by_type_list (List.map field_to_texpr fields)
   | TTpointer typ ->
      print_exprs := te :: !print_exprs;
      Format.fprintf fmt "%%p"
   | TTtuple tl -> (* impossible to print the results of a multiple-return function *)
-     (* TODO: handle Print(f()) where f return multiple values *)
+     (* TODO: handle Print(f()) where f returns multiple values *)
      assert false
   | TTnil | TTunit | TTuntyped ->
      assert false
@@ -87,7 +88,9 @@ let format_by_type_main fmt te =
      (* There is a special case for pointers to struct *)
      let fields = (Smap.find str !struct_env).fields in
      let is_assignable, loc = te.is_assignable, te.loc in
-     let field_to_texpr (fd, typ) = { tdesc = TEselect_dref (te, fd); typ; is_assignable; loc } in
+     let field_to_texpr (fd, typ) =
+       { tdesc = TEselect_dref (te, fd); typ; is_assignable; loc }
+     in
      Format.fprintf fmt "&{%a}" format_by_type_list (List.map field_to_texpr fields)
   | _ ->
      format_by_type fmt te
@@ -97,7 +100,7 @@ let format_by_type_main fmt te =
 let format_of_texpr fmt te =
   match te.tdesc with
   | TEint n ->
-     Format. fprintf fmt "%s" (Int64.to_string n)
+     Format.fprintf fmt "%s" (Int64.to_string n)
   | TEstring s ->
      Format.fprintf fmt "%s" s
   | TEbool b -> (* Go prints "true"/"false", but it is hard to do so from assembly *)
