@@ -1,10 +1,10 @@
 CMO=asg.cmo utils.cmo lexer.cmo parser.cmo type_checker.cmo \
 	label.cmo register.cmo is.cmo rtl.cmo ertl.cmo liveness.cmo interference.cmo colouring.cmo \
-	ltl.cmo x86_64.ml unionFind.ml branch.ml lin.ml main.cmo
+	ltl.cmo x86_64.cmo unionFind.cmo branch.cmo lin.cmo pretty_printer.cmo pp.cmo main.cmo
 GENERATED=lexer.ml parser.ml parser.mli
 BIN=pgoc
 TEST=./test.sh
-FLAGS=
+FLAGS=-I +zarith
 
 all: $(BIN) test_all
 
@@ -23,7 +23,7 @@ test_all: $(BIN)
 	cd tests && $(TEST) -all ../$(BIN)
 
 $(BIN): $(CMO)
-	ocamlc $(FLAGS) -o $(BIN) nums.cma $(CMO)
+	ocamlfind ocamlc -package zarith -linkpkg -g -o $(BIN) $(CMO)
 
 .SUFFIXES: .mli .ml .cmi .cmo .mll .mly
 

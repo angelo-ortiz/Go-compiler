@@ -133,6 +133,8 @@ let rec print_is_expr fmt e =
      Format.fprintf fmt "\n\tEbool %s" (if b then "true" else "false")
   | Istree.IEnil ->
      Format.fprintf fmt "\n\tEnil"
+  | Istree.IElist el ->
+     Format.fprintf fmt "\n\tElist %a" print_is_list el
   | Istree.IEmalloc n ->
      Format.fprintf fmt "\n\tEmalloc %s" (Int32.to_string n)
   | Istree.IEaccess v ->
@@ -485,18 +487,18 @@ let pp_label_M_map_rtl fmt =
 let pp_label_M_map_ltl fmt =
   pp_label_M fmt print_ltl_instr
 
-let print_is_function fmt f (funct:Istree.idecl_fun) =
+let print_is_function fmt f (funct:Istree.ifundef) =
   Format.fprintf fmt "@[IS: %s:" f;
   Format.printf "%a@]@." pp_list_is funct.body
    
-let print_rtl_function fmt f (funct:Rtltree.decl_fun) =
+let print_rtl_function fmt f (funct:Rtltree.rfundef) =
   Format.fprintf fmt "@[%a <== %s(%a):" print_reg_list funct.result f print_reg_list funct.formals;
   Format.fprintf fmt "\n\tentry : %a" Label.string_of_label funct.entry;
   Format.fprintf fmt "\n\texit : %a" Label.string_of_label funct.exit_;
   Format.fprintf fmt "\n\tlocals: {%a}" Pretty_printer.pp_set funct.locals;
   Format.printf "%a@]@." pp_label_M_map_rtl funct.body
    
-let print_ertl_function fmt f (funct:Ertltree.decl_fun) =
+let print_ertl_function fmt f (funct:Ertltree.efundef) =
   Format.printf "\n**  === ERTL: %s ===  **\n" f;
   Format.fprintf fmt "@[%s():" f;
   Format.fprintf fmt "\n\tentry : %a" Label.string_of_label funct.entry;
@@ -510,7 +512,7 @@ let print_ertl_function fmt f (funct:Ertltree.decl_fun) =
    * let colour, nlocals = Colouring.alloc_registers Register.allocable funct.stored_locals graph in
    * Format.fprintf fmt "\nColouring done:\n%a\n\n" Pretty_printer.pp_c colour *)
   
-let print_ltl_function fmt f (funct:Ltltree.decl_fun) =
+let print_ltl_function fmt f (funct:Ltltree.lfundef) =
   Format.printf "\n**  === LTL: %s ===  **\n" f;
   Format.fprintf fmt "@[%s():" f;
   Format.fprintf fmt "\n\tentry : %a" Label.string_of_label funct.entry;
@@ -532,14 +534,14 @@ let pp_asg_smap_ertl fmt =
 let pp_asg_smap_ltl fmt =
   pp_asg_smap fmt print_ltl_function 
 
-let is_file (f:Istree.ifile) =
+let is_file (f:Istree.iprogramme) =
   Format.printf "%a" pp_asg_smap_is f 
 
-let rtl_file (f:Rtltree.file) =
+let rtl_file (f:Rtltree.rprogramme) =
   Format.printf "%a" pp_asg_smap_rtl f
 
-let ertl_file (f:Ertltree.file) =
+let ertl_file (f:Ertltree.eprogramme) =
   Format.printf "%a" pp_asg_smap_ertl f
 
-let ltl_file (f:Ltltree.file) =
+let ltl_file (f:Ltltree.lprogramme) =
   Format.printf "%a" pp_asg_smap_ltl f

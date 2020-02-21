@@ -7,7 +7,7 @@ type colour =
 
 type colouring = colour Register.map
 
-module IntSet = Set.Make( struct let compare = Pervasives.compare type t = int end )
+module IntSet = Set.Make( struct let compare = compare type t = int end )
 
 type action =
   | Simplify

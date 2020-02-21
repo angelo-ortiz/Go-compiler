@@ -22,7 +22,7 @@ type binop =
   | Band | Bor                          (* && || *)
 
 type constant =
-  | Cint of Big_int.big_int
+  | Cint of Big_int_Z.big_int
   | Cstring of string
   | Cbool of bool
   | Cnil

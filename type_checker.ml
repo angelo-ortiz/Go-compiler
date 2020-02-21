@@ -173,7 +173,7 @@ let rec type_expr env (e:Ast.expr) =
 and compute_type env e =
   match e.desc with
   | Ast.Ecst (Cint n) ->
-     TEint (Int64.of_string (Big_int.string_of_big_int n)), TTint, false
+     TEint (Int64.of_string (Big_int_Z.string_of_big_int n)), TTint, false
   | Ast.Ecst (Cstring s) ->
      TEstring s, TTstring, false
   | Ast.Ecst (Cbool b) ->

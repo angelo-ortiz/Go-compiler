@@ -214,19 +214,23 @@ let fun_entry saved formals entry res_on_stack =
   let l = List.fold_right (fun (s, r) l -> move r s l) saved l in
   generate (Ialloc_frame l)
 
-let fun_exit saved retrs exitl =
-  let l = generate (Ifree_frame (generate Ireturn)) in
+let fun_exit fname saved retrs exitl =
+  let l = generate Ireturn in
+  let l = if fname <> "main" then l
+          else generate (Imbinop (Mxor, Register.rax, Register.rax, l)) (* exit *)
+  in
+  let l = generate (Ifree_frame l) in
   let l = List.fold_right (fun (s, r) l -> move s r l) saved l in
   let l = move_return_def l retrs in
   graph := Label.M.add exitl (Igoto l) !graph
   
-let funct (f:Rtltree.rfundef) =
+let funct fname (f:Rtltree.rfundef) =
   Label.M.iter (fun l i -> let i = instr i in graph := Label.M.add l i !graph) f.body; 
   let saved = List.map (fun r -> Register.fresh (), r) Register.callee_saved in
   let n_res = List.length f.result in
   let res_on_stack = if n_res > 1 then n_res else 0 in 
   let entry = fun_entry saved f.formals f.entry res_on_stack in
-  fun_exit saved f.result f.exit_;
+  fun_exit fname saved f.result f.exit_;
   let body = !graph in
   let stored_locals = !mem_locals in
   graph := Label.M.empty;
@@ -235,4 +239,4 @@ let funct (f:Rtltree.rfundef) =
   { formals = List.length f.formals; locals = f.locals; stored_locals; entry; body }
     
 let programme =
-  Asg.Smap.map funct
+  Asg.Smap.mapi funct

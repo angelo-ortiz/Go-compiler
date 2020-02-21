@@ -152,7 +152,7 @@ shstmt:
   | exps = expr_list SET values = expr_list
 	{ Iassign (exps, values)  }
   | vars = assign values = expr_list
-	{ Ideclare (List.rev vars, values) }
+	{ Ideclare (vars, values) }
 ;
 
 print:

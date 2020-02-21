@@ -16,7 +16,7 @@ let close = "\027[0m"
 let level = ref 0
 let dummy_loc = Lexing.dummy_pos, Lexing.dummy_pos
 let word_size = 8 (* x86_64: 64b *)
-let max_int = Big_int.power_int_positive_int 2 63
+let max_int = Big_int_Z.power_int_positive_int 2 63
 
 let syntax_error loc msg =
   raise (Syntax_error (loc, msg))
@@ -78,22 +78,22 @@ let check_package pkg func func_loc =
      syntax_error pkg.loc "expected package fmt"
 
 let overflow n =
-  Big_int.ge_big_int n max_int
+  Big_int_Z.ge_big_int n max_int
   
 let underflow =
-  let min_int = Big_int.minus_big_int max_int in
-  fun n -> Big_int.lt_big_int n min_int
+  let min_int = Big_int_Z.minus_big_int max_int in
+  fun n -> Big_int_Z.lt_big_int n min_int
          
 let check_int_size n loc =
   if !level =  0 && (overflow n || underflow n) then
     syntax_error loc
       (Format.sprintf "%s%s%s%s%s does not fit in 64 bits"
-		 invert yellow (Big_int.string_of_big_int n) close close)
+		 invert yellow (Big_int_Z.string_of_big_int n) close close)
   
 let check_int n_str loc =
-  let n = Big_int.big_int_of_string n_str in
+  let n = Big_int_Z.big_int_of_string n_str in
   check_int_size n loc;
-  if !level land 1 = 1 then Big_int.minus_big_int n
+  if !level land 1 = 1 then Big_int_Z.minus_big_int n
   else n
   
 let check_neg_int e =
@@ -129,7 +129,7 @@ let string_of_binop fmt = function
   | Bor -> Format.fprintf fmt "||"
 									  
 let string_of_constant fmt = function
-  | Cint n -> Format.fprintf fmt "%s" (Big_int.string_of_big_int n)
+  | Cint n -> Format.fprintf fmt "%s" (Big_int_Z.string_of_big_int n)
   | Cstring str -> Format.fprintf fmt "\"%s\"" str
   | Cbool b -> Format.fprintf fmt (if b then "true" else "false")
   | Cnil -> Format.fprintf fmt "nil"

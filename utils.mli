@@ -20,7 +20,7 @@ val sub_list : 'a list -> int -> int -> 'a list
 val flatten : 'a list list -> 'a list list
 val sum_of_list : int list -> int
 val check_package : Ast.expr -> string -> Ast.loc -> unit
-val check_int : string -> Ast.loc -> Big_int.big_int
+val check_int : string -> Ast.loc -> Big_int_Z.big_int
 val check_neg_int : Ast.expr -> Ast.expr
 val format_mid_string : string -> string -> string -> string
 val string_of_unop : Format.formatter -> Ast.unop -> unit

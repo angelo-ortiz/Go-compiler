@@ -270,7 +270,7 @@ let rec stmt retrs s exitl destl =
      let l = List.fold_right2 assign srcrs vars destl in
      List.fold_right2 expr srcrs values l
   | ISreturn [{ length; desc = IEcall (f, actuals) } as e] ->
-     expr (List.hd retrs) e exitl
+     expr (List.flatten retrs) e exitl
   | ISreturn es ->
      List.fold_right2 expr retrs es exitl
   | ISfor (e, bfor) ->
@@ -279,8 +279,8 @@ let rec stmt retrs s exitl destl =
      graph := Label.M.add l (Igoto entry) !graph;
      entry
 
-and block retr b exitl destl =
-  List.fold_right (fun st dlab -> stmt retr st exitl dlab) b destl
+and block retrs b exitl destl =
+  List.fold_right (fun st dlab -> stmt retrs st exitl dlab) b destl
   
 let funct (f:Istree.ifundef) =
   let r_formals = List.map (fun (_, n) -> multi_fresh_int n) f.formals in
