@@ -15,8 +15,9 @@ type mbinop =
   | Mmov
            
 type iexpr = {
-    length : int; (* number of 8-byte blocks *)
-    desc : idesc;
+    length : int;    (* number of 8-byte blocks *)
+    desc : idesc;    (* selected instruction *)
+    typ: Asg.t_typ;  (* type *)
   }
            
 and idesc =
@@ -49,12 +50,14 @@ and assignee =
 type istmt =
   | ISexpr of iexpr
   | IScall of ident * iexpr list
-  | ISprint of string * iexpr list
+  | ISprint of iexpr list
   | ISif of iexpr * istmt list * istmt list
   | ISassign of assign list * iexpr list
   | ISreturn of iexpr list
   | ISfor of iexpr * istmt list
 
+type istrdef = (string * Asg.t_typ) list
+                 
 type ifundef = {
     formals : (ident * int) list;
     result : int list; (* list of results' size in 8-byte blocks *)
@@ -62,4 +65,7 @@ type ifundef = {
     body: istmt list;
   }
          
-type iprogramme = ifundef Asg.smap
+type iprogramme = {
+    structs : istrdef Asg.smap;
+    functions: ifundef Asg.smap;
+  }

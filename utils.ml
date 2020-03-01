@@ -201,6 +201,15 @@ let rec string_of_texpr fmt te =
      Format.fprintf fmt "@[(%a %a@ %a)@]"
        string_of_texpr l string_of_binop op string_of_texpr r
 
+let rec string_of_list fmt string_of_el = function
+  | [] ->
+     ()
+  | [x] ->
+     string_of_el fmt x
+  | x :: xs ->
+     let partial fmt = string_of_list fmt string_of_el in
+     Format.fprintf fmt "%a %a" string_of_el x partial xs
+    
 let length_of_type = function
   | TTint | TTstring | TTbool | TTstruct _ | TTpointer _ ->
      1
@@ -326,7 +335,7 @@ let rec scan_tstmt loc env use_queue exp_rtype = function
   | TScall (_, actuals) ->
      let env, use_queue = scan_texpr_list env use_queue actuals in
      env, use_queue, false
-  | TSprint (_, texps) ->
+  | TSprint (texps) ->
      let env, use_queue = scan_texpr_list env use_queue texps in
      env, use_queue, false
   | TSincr texp | TSdecr texp ->

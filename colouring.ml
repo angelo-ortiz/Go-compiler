@@ -249,7 +249,7 @@ let alloc_registers mach_regs spilled_regs graph =
       Register.S.fold (fun w avail_cols ->
           try 
             match Register.M.find w colours with
-            | Spilled _ -> (* spilled nodes do not appear yet here *)
+            | Spilled _ -> (* spilled nodes do not appear here yet *)
                assert false
             | Reg r ->
                Register.S.remove r avail_cols

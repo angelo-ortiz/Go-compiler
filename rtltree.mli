@@ -18,7 +18,7 @@ type rinstr =
   | Imalloc of Register.t * int32 * Label.t
   | Ilea_local of Register.t list * int * Register.t * Label.t (* local Register.t | offset | dst *)
   | Ilea of Register.t * int * Register.t * Label.t (* src | offset | dst *)
-  | Iload of Register.t list * int * Register.t list * Label.t (* src | offset | dst *)
+  | Iload of Register.t list * int * Register.t list * Label.t (* srcs | offset | dsts *)
   | Istore of Register.t * Register.t * int * Label.t (* src | dst | offset *)
   | Icall of Register.t list * string * Register.t list * Label.t (* results | name | args *)
   | Iprint of Register.t list * Label.t (* expressions *)
@@ -41,4 +41,7 @@ type rfundef = {
     body : rinstr Label.map;
   }
 
-type rprogramme = rfundef Asg.smap
+type rprogramme = {
+    structs : Istree.istrdef Asg.smap;
+    functions : rfundef Asg.smap;
+  }

@@ -128,7 +128,9 @@ let instr = function
      let fst_rx = List.hd rxs in
      if not (Register.S.mem fst_rx !mem_locals_set) then begin
          mem_locals := rxs :: !mem_locals;
-         mem_locals_set := List.fold_left (fun set r -> Register.S.add r set) !mem_locals_set rxs
+         mem_locals_set := List.fold_left (fun set r ->
+                               Register.S.add r set
+                             ) !mem_locals_set rxs
        end;
      Ilea_local (fst_rx, ofs, dst, l)
   | Rtltree.Ilea (src, ofs, dst, l) -> 
@@ -148,13 +150,15 @@ let instr = function
      let act_param, stack = assoc_arguments actuals in
      let n = List.length act_param in
      let size_stack = List.length stack in
-     let l = if size_stack = 0 then l
-             else generate (Ifree_stack (Int32.of_int (Utils.word_size * List.length stack), l))
+     let l =
+       if size_stack = 0 then l
+       else generate (Ifree_stack (Int32.of_int (Utils.word_size * List.length stack), l))
      in
      let l = generate (Icall (f, n, move_return_call l res)) in
      (* reserve stack space for results only if more than one *)
-     let l = if size_res > Utils.word_size then generate (Ialloc_stack (Int32.of_int size_res, l))
-             else l
+     let l =
+       if size_res > Utils.word_size then generate (Ialloc_stack (Int32.of_int size_res, l))
+       else l
      in
      let l = List.fold_right (fun r l -> push_param r l) stack l in
      let l = List.fold_right (fun (a, r) l -> move a r l) act_param l in

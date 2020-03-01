@@ -213,6 +213,17 @@ let assign srcrs e destl =
                ) (destl, n) srcrs
      in 
      expr [dstr] e l
+
+let dfs_print =
+  let rec loop fmt out_regs = function
+    | [], [] ->
+       fmt, out_regs
+    | [], _ | _, [] ->
+       assert false
+    | ty :: types, in_regs ->
+       assert false
+  in
+  loop "" []
      
 let rec stmt retrs s exitl destl =
   match s with
@@ -245,13 +256,23 @@ let rec stmt retrs s exitl destl =
      let _, l_results = List.assoc f !number_formals_results in
      let n_results = Utils.sum_of_list l_results in
      let destrs = multi_fresh_int n_results in
-     expr destrs { length = n_results; desc = IEcall (f, actuals) } destl
-  | ISprint (fmt, es) -> (* es: list of 8-byte fit expressions *)
+     (* the type is unused in `expr` so TTuntyped should suffice *)
+     expr destrs { length = n_results; desc = IEcall (f, actuals); typ = TTuntyped } destl
+  | ISprint es ->
+     (* TODO: keep type of expressions? *)
      let fmt_reg = Register.fresh () in
-     let destrs = multi_fresh_list es in
-     let l = generate (Iprint (fmt_reg :: destrs, destl)) in
+     let destrs = List.map (fun (e:Istree.iexpr) -> multi_fresh_int e.length) es in
+     let types =
+       match es with
+       | [{ length; desc = IEcall _; typ = TTtuple typ}] ->
+          typ
+       | _ ->
+          List.map (fun e -> e.typ) es
+     in
+     let fmt, p_destrs = dfs_print (types, List.flatten destrs) in
+     let l = generate (Iprint (fmt_reg :: p_destrs, destl)) in
      let l = generate (Istring (fmt, fmt_reg, l)) in
-     List.fold_right2 expr (List.map listify destrs) es l
+     List.fold_right2 expr destrs es l
   | ISif (e, bif, belse) ->
      condition e
        (block retrs bif exitl destl)

@@ -21,6 +21,8 @@ Remarks
 1. Print should be implemented with assembly's primitive *printf*
 1. Escaped character *%* in lexer for function print 
 1. Must make a last check pass to delete futile *nop*s (Union-Find) when translationg to LTL
+1. Add `.print_*type*` functions in the type checker
+1. Review escape analysis: notably, all `&` operands should be on the heap instead of the stack
 
 Fixed issues
 ------------

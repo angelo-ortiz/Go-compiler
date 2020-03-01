@@ -30,6 +30,7 @@ val string_of_expr : Format.formatter -> Ast.desc -> unit
 val string_of_type_list : Format.formatter -> Asg.t_typ list -> unit
 val string_of_type : Format.formatter -> Asg.t_typ -> unit
 val string_of_texpr : Format.formatter -> Asg.texpr -> unit
+val string_of_list : Format.formatter -> (Format.formatter -> 'a -> unit) -> 'a list -> unit
 val length_of_type : Asg.t_typ -> int
 val get_ident : Ast.expr * Ast.loc -> Ast.ident
 val binop_expected_type : Ast.binop -> Asg.t_typ option
