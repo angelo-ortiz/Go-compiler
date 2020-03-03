@@ -5,6 +5,7 @@ open Rtltree
 let graph = ref Label.M.empty
 let locals = Hashtbl.create 32
 let number_formals_results = ref []
+let print_functions = ref []
 
 let listify =
   fun x -> [x]
@@ -89,9 +90,14 @@ let rec expr destrs e destl =
      in
      expr tmps str l
   | IEload (str, n) ->
-     let tmps = multi_fresh_int e.length in
-     expr tmps str (generate (
-     Iload (tmps, n, destrs, destl)))
+     let srcrs = multi_fresh_int e.length in
+     let _, l, _ =
+       List.fold_left2 (fun (_, l, n) src dst ->
+           let i = Iload (src, n, dst, l) in
+           Some i, generate i, n + Utils.word_size
+         ) (None, destl, n) srcrs destrs
+     in
+     expr srcrs str l
   | IEcall (f, actuals) ->
      let n_formals, n_results = List.assoc f !number_formals_results in
      let r_args = List.map multi_fresh_int n_formals in
@@ -214,16 +220,54 @@ let assign srcrs e destl =
      in 
      expr [dstr] e l
 
-let dfs_print =
-  let rec loop fmt out_regs = function
+let format_or_type = function
+  | Asg.TTint ->
+     Format "%d"
+  | Asg.TTstring ->
+     Format "%s"
+  | Asg.TTbool ->
+     Format "%s"
+  | Asg.TTnil | Asg.TTunit | Asg.TTuntyped | TTtuple _ ->
+     assert false
+  | Asg.TTstruct _ | TTpointer (TTstruct _) as ty ->
+     Type ty
+  | Asg.TTpointer _ ->
+     Format "%p"
+     
+let translate_print lab types_regs =
+  let rec reverse_lists acc (fmt, regs) = function
     | [], [] ->
-       fmt, out_regs
+       if fmt = "" then acc
+       else (Format fmt, List.rev regs) :: acc
     | [], _ | _, [] ->
        assert false
     | ty :: types, in_regs ->
-       assert false
+       let rxs, in_regs = Utils.split_list in_regs (Is.length_of_type ty) in
+       match format_or_type ty with
+       | Format nxt_fmt ->
+          let fmt = String.concat " " [fmt; nxt_fmt] in
+          let regs = List.fold_left (fun xs x -> x :: xs) regs rxs in
+          reverse_lists acc (fmt, regs) (types, in_regs)
+       | Type ty as typ ->
+          let acc = (typ, rxs) :: (Format fmt, List.rev regs) :: acc in
+          reverse_lists acc ("", []) (types, in_regs)
   in
-  loop "" []
+  let rec loop lab blank = function
+    | [] ->
+       lab
+    | (Format fmt, regs) :: t_r ->
+       let fmt_reg = Register.fresh () in
+       let lab = generate (Iprint (fmt_reg :: regs, lab)) in
+       let lab = generate (Istring ((if blank then " " ^ fmt else fmt), fmt_reg, lab)) in
+       loop lab true t_r
+    | (Type ty, regs) :: t_r ->
+       (* TODO: 
+        * Create auxiliary print functions
+        * Handle differently struct and pointer-to-struct prints
+        *)
+       loop lab true t_r
+  in
+  loop lab false (reverse_lists [] ("", []) types_regs)
      
 let rec stmt retrs s exitl destl =
   match s with
@@ -259,8 +303,6 @@ let rec stmt retrs s exitl destl =
      (* the type is unused in `expr` so TTuntyped should suffice *)
      expr destrs { length = n_results; desc = IEcall (f, actuals); typ = TTuntyped } destl
   | ISprint es ->
-     (* TODO: keep type of expressions? *)
-     let fmt_reg = Register.fresh () in
      let destrs = List.map (fun (e:Istree.iexpr) -> multi_fresh_int e.length) es in
      let types =
        match es with
@@ -269,9 +311,7 @@ let rec stmt retrs s exitl destl =
        | _ ->
           List.map (fun e -> e.typ) es
      in
-     let fmt, p_destrs = dfs_print (types, List.flatten destrs) in
-     let l = generate (Iprint (fmt_reg :: p_destrs, destl)) in
-     let l = generate (Istring (fmt, fmt_reg, l)) in
+     let l = translate_print destl (types, List.flatten destrs) in
      List.fold_right2 expr destrs es l
   | ISif (e, bif, belse) ->
      condition e
@@ -323,9 +363,9 @@ let funct (f:Istree.ifundef) =
   { formals = List.flatten r_formals; result = List.flatten result;
     locals = local_vars; entry; exit_; body } 
   
-let programme p =
+let programme (p:Istree.iprogramme) =
   let add_retrs f (def:Istree.ifundef) acc =
     (f, (List.map snd def.formals, def.result)) :: acc
   in
-  number_formals_results := Asg.Smap.fold add_retrs p []; 
-  Asg.Smap.map funct p
+  number_formals_results := Asg.Smap.fold add_retrs p.functions [];
+  { structs = p.structs; functions = Asg.Smap.map funct p.functions }

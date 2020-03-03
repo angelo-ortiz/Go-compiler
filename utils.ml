@@ -44,7 +44,7 @@ let sub_list l start len =
   let rec loop acc i n = function
     | [] ->
        if n = 0 then List.rev acc
-       else raise (Invalid_argument "")
+       else raise (Invalid_argument "Not enough elements in the list")
     | x :: l ->
        if n = 0 then List.rev acc
        else begin
@@ -53,6 +53,17 @@ let sub_list l start len =
          end
   in
   loop [] 0 len l
+
+let split_list l n =
+  let rec loop acc i = function
+    | l when i = 0 ->
+       List.rev acc, l
+    | [] ->
+       raise (Invalid_argument "Not enough elements in the list")
+    | x :: xs ->
+       loop (x :: acc) (pred i) xs
+  in
+  loop [] n l
 
 let flatten l =
   let rec loop acc = function

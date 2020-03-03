@@ -1,6 +1,10 @@
 
 (* Register transfer language grammar *)
 
+type cell =
+  | Format of string
+  | Type of Asg.t_typ
+
 type mubranch =
   | Mjz | Mjnz | Mjei of int32 | Mjnei of int32
   | Mjgi of int32 | Mjgei of int32 | Mjli of int32 | Mjlei of int32
@@ -18,7 +22,7 @@ type rinstr =
   | Imalloc of Register.t * int32 * Label.t
   | Ilea_local of Register.t list * int * Register.t * Label.t (* local Register.t | offset | dst *)
   | Ilea of Register.t * int * Register.t * Label.t (* src | offset | dst *)
-  | Iload of Register.t list * int * Register.t list * Label.t (* srcs | offset | dsts *)
+  | Iload of Register.t * int * Register.t * Label.t (* src | offset | dst *)
   | Istore of Register.t * Register.t * int * Label.t (* src | dst | offset *)
   | Icall of Register.t list * string * Register.t list * Label.t (* results | name | args *)
   | Iprint of Register.t list * Label.t (* expressions *)

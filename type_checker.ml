@@ -46,71 +46,6 @@ let rec type_of_ast_typ = function
   | Ast.Tpointer typ ->
      TTpointer (type_of_ast_typ typ)
 
-(* TODO: add the possiblity to return multiple statements in type_shstmt
- * To print complex structures, we need to call a *function* to do it
- *)
-let rec format_by_type fmt te =
-  match te.typ with 
-  | TTint ->
-     print_exprs := te :: !print_exprs;
-     Format.fprintf fmt "%%d"
-  | TTstring ->
-     print_exprs := te :: !print_exprs;
-     Format.fprintf fmt "%%s"
-  | TTbool ->
-     print_exprs := te :: !print_exprs;
-     Format.fprintf fmt "%%d"
-  | TTstruct str ->
-     let fields = (Smap.find str !struct_env).fields in
-     let is_assignable, loc = te.is_assignable, te.loc in
-     let field_to_texpr (fd, typ) = { tdesc = TEselect (te, fd); typ; is_assignable; loc }
-     in
-     Format.fprintf fmt "{%a}" format_by_type_list (List.map field_to_texpr fields)
-  | TTpointer typ ->
-     print_exprs := te :: !print_exprs;
-     Format.fprintf fmt "%%p"
-  | TTtuple tl -> (* impossible to print the results of a multiple-return function *)
-     (* TODO: handle Print(f()) where f returns multiple values *)
-     assert false
-  | TTnil | TTunit | TTuntyped ->
-     assert false
-
-and format_by_type_list fmt = function
-  | [] ->
-     ()
-  | [t] ->
-     format_by_type fmt t
-  | t :: tl ->
-     Format.fprintf fmt "%a %a" format_by_type t format_by_type_list tl
-
-let format_by_type_main fmt te =
-  match te.typ with
-  | TTpointer (TTstruct str) ->
-     (* There is a special case for pointers to struct *)
-     let fields = (Smap.find str !struct_env).fields in
-     let is_assignable, loc = te.is_assignable, te.loc in
-     let field_to_texpr (fd, typ) =
-       { tdesc = TEselect_dref (te, fd); typ; is_assignable; loc }
-     in
-     Format.fprintf fmt "&{%a}" format_by_type_list (List.map field_to_texpr fields)
-  | _ ->
-     format_by_type fmt te
-    
-(* TODO: move this to ertl: print '->' fields iff not nil *)
-(* unify the strings: union-find *)
-let format_of_texpr fmt te =
-  match te.tdesc with
-  | TEint n ->
-     Format.fprintf fmt "%s" (Int64.to_string n)
-  | TEstring s ->
-     Format.fprintf fmt "%s" s
-  | TEbool b -> (* Go prints "true"/"false", but it is hard to do so from assembly *)
-     Format.fprintf fmt "%d" (if b then 1 else 0)
-  | TEnil -> (* Go prints <nil>, but it is hard to do so from assembly *)
-     Format.fprintf fmt "0"
-  | _ ->
-     format_by_type_main fmt te
-    
 let type_of_unop exp op t_exp =
   match op, t_exp.typ with
   | Ast.Unot, TTbool ->
@@ -432,14 +367,6 @@ let rec type_shstmt env b_vars b_number = function
           if not !import_fmt then
             Utils.type_error e.loc "undefined: fmt";
           used_fmt := true;
-          (* Begin
-           * let exprs = type_expr_list env el in
-           * let printer fmt = Utils.string_of_list fmt format_of_texpr in
-           * let format = Format.asprintf "%a" printer exprs in
-           * let p_exprs = List.rev !print_exprs in
-           * print_exprs := [];
-           * b_vars, TSprint (format, p_exprs)
-           * End *)
           b_vars, TSprint (type_expr_list env el)
      end
   | Ast.Iincr e | Idecr e as i_d->

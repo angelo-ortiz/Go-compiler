@@ -26,7 +26,8 @@ let length_of_struct =
     try Hashtbl.find h s
     with Not_found ->
       let str = Smap.find s !struct_env in
-      let len = List.fold_left (fun len (_, ty) -> len + _length_of_type f ty) 0 str.fields in
+      let len = List.fold_left (fun len (_, ty) -> len + _length_of_type f ty) 0 str.fields
+      in
       Hashtbl.add h s len;
       len
   in

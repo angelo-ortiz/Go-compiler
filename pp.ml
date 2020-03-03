@@ -173,8 +173,8 @@ let rec print_is_stmt fmt = function
      print_is_expr fmt e
   | Istree.IScall (f, actuals) ->
      Format.fprintf fmt "\n\tScall %s(%a)" f print_is_list actuals
-  | Istree.ISprint (format, args) ->
-     Format.fprintf fmt "\n\tSprint (%s, %a)" format print_is_list args
+  | Istree.ISprint args ->
+     Format.fprintf fmt "\n\tSprint (%a)" print_is_list args
   | Istree.ISif (cond, bif, belse) ->
      Format.fprintf fmt "\n\tSif %a {%a} {%a}" print_is_expr cond print_is_block bif
        print_is_block belse
@@ -250,9 +250,9 @@ let rec print_rtl_instr fmt lab = function
      Format.fprintf fmt "\n\t%a: lea %d(%a) %a --> %a" Label.string_of_label lab
        ofs Register.string_of_reg src Register.string_of_reg dst
        Label.string_of_label l
-  | Rtltree.Iload (srcs, ofs, dsts, l) ->
+  | Rtltree.Iload (src, ofs, dst, l) ->
      Format.fprintf fmt "\n\t%a: mov %d(%a) %a --> %a" Label.string_of_label lab
-       ofs print_reg_list srcs print_reg_list dsts Label.string_of_label l
+       ofs Register.string_of_reg src Register.string_of_reg dst Label.string_of_label l
   | Rtltree.Istore (src, dst, ofs, l) ->
      Format.fprintf fmt "\n\t%a: mov %a %d(%a) --> %a" Label.string_of_label lab
        Register.string_of_reg src ofs Register.string_of_reg dst Label.string_of_label l
@@ -535,10 +535,10 @@ let pp_asg_smap_ltl fmt =
   pp_asg_smap fmt print_ltl_function 
 
 let is_file (f:Istree.iprogramme) =
-  Format.printf "%a" pp_asg_smap_is f 
+  Format.printf "%a" pp_asg_smap_is f.functions 
 
 let rtl_file (f:Rtltree.rprogramme) =
-  Format.printf "%a" pp_asg_smap_rtl f
+  Format.printf "%a" pp_asg_smap_rtl f.functions
 
 let ertl_file (f:Ertltree.eprogramme) =
   Format.printf "%a" pp_asg_smap_ertl f

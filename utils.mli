@@ -17,6 +17,7 @@ val decr_level : unit -> unit
 val position_of_loc : Ast.loc -> int * int * int
 val list_fst_rev : ('a  * 'b) list -> 'a list -> 'a list 
 val sub_list : 'a list -> int -> int -> 'a list
+val split_list : 'a list -> int -> 'a list * 'a list
 val flatten : 'a list list -> 'a list list
 val sum_of_list : int list -> int
 val check_package : Ast.expr -> string -> Ast.loc -> unit

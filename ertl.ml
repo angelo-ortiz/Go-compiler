@@ -93,7 +93,7 @@ let translate_binop = function
      Mmov
 
 (* Functions' return values convention:
- *** if only one 8B result, then in %rax
+ *** if only one 8 B result, then in %rax
  *** otherwise, all the results on the stack and the first one is at the lowest address *)
 let move_return_call l = function
   | [] ->
@@ -135,14 +135,8 @@ let instr = function
      Ilea_local (fst_rx, ofs, dst, l)
   | Rtltree.Ilea (src, ofs, dst, l) -> 
      Ilea (src, ofs, dst, l)
-  | Rtltree.Iload (srcs, ofs, dsts, l) ->
-     let instr_opt, _, _ =
-       List.fold_left2 (fun (_, l, n) src dst ->
-           let i = Iload (src, n, dst, l) in
-           Some i, generate i, n + Utils.word_size
-         ) (None, l, ofs) srcs dsts
-     in
-     begin match instr_opt with Some i -> i | None -> assert false end
+  | Rtltree.Iload (src, ofs, dst, l) ->
+     Iload (src, ofs, dst, l)
   | Rtltree.Istore (src, dst, ofs, l) ->
      Istore (src, dst, ofs, l)
   | Rtltree.Icall (res, f, actuals, l) ->
@@ -242,5 +236,5 @@ let funct fname (f:Rtltree.rfundef) =
   mem_locals := [];
   { formals = List.length f.formals; locals = f.locals; stored_locals; entry; body }
     
-let programme =
-  Asg.Smap.mapi funct
+let programme p =
+  Asg.Smap.mapi funct p.functions
