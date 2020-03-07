@@ -225,16 +225,12 @@ let format_or_type = function
      Format "%d"
   | Asg.TTstring ->
      Format "%s"
-  | Asg.TTbool ->
-     Format "%s"
   | Asg.TTnil | Asg.TTunit | Asg.TTuntyped | TTtuple _ ->
      assert false
-  | Asg.TTstruct _ | TTpointer (TTstruct _) as ty ->
+  | Asg.TTbool | Asg.TTstruct _ | TTpointer _ as ty ->
      Type ty
-  | Asg.TTpointer _ ->
-     Format "%p"
      
-let translate_print lab types_regs =
+let rec translate_print lab types_regs =
   let rec reverse_lists acc (fmt, regs) = function
     | [], [] ->
        if fmt = "" then acc
@@ -258,16 +254,46 @@ let translate_print lab types_regs =
     | (Format fmt, regs) :: t_r ->
        let fmt_reg = Register.fresh () in
        let lab = generate (Iprint (fmt_reg :: regs, lab)) in
-       let lab = generate (Istring ((if blank then " " ^ fmt else fmt), fmt_reg, lab)) in
+       let lab = generate (Istring ((if blank then fmt ^ " " else fmt), fmt_reg, lab)) in
        loop lab true t_r
-    | (Type ty, regs) :: t_r ->
-       (* TODO: 
-        * Create auxiliary print functions
-        * Handle differently struct and pointer-to-struct prints
-        *)
-       loop lab true t_r
+    | (Type TTbool, regs) :: t_r ->
+       let fmt_bool = Register.fresh () in
+       let lab = generate (Iprint ([fmt_bool], lab)) in
+       let neqz_l = generate (Istring ((if blank then "true " else "true"), fmt_bool, lab))
+       in
+       let eqz_l = generate (Istring ((if blank then "false " else "false"), fmt_bool, lab))
+       in
+       loop (generate (Imubranch (Mjz, List.hd regs, eqz_l, neqz_l))) true t_r
+    | (Type (TTstruct str), regs) :: t_r ->
+       loop (tr_print_struct lab str regs) true t_r
+    | (Type (TTpointer ty), regs) :: t_r ->
+       let false_l =
+         match ty with
+         | TTstruct str ->
+            let fmt_ptr = Register.fresh () in
+            let regs = regs in (* TODO: expand to the fields *)
+            let lab = tr_print_struct lab str regs in
+            let lab = generate (Iprint ([fmt_ptr], lab)) in
+            generate (Istring ("&", fmt_ptr, lab))
+         | _ ->
+            let fmt_reg = Register.fresh () in
+            let l = generate (Iprint (fmt_reg :: regs, lab)) in
+            generate (Istring ((if blank then "%p " else "%p"), fmt_reg, l))
+       in
+       let fmt_nil = Register.fresh () in
+       let true_l = generate (Iprint ([fmt_nil], lab)) in
+       let true_l =
+         generate (Istring ((if blank then "<nil> " else "<nil>"), fmt_nil, true_l))
+       in
+       loop (generate (Imubranch (Mjz, List.hd regs, true_l, false_l))) true t_r
+    | (Type _, _) :: _ ->
+       assert false
   in
   loop lab false (reverse_lists [] ("", []) types_regs)
+
+and tr_print_struct lab str regs =
+  (* TODO: use print_functions!!! *)
+  assert false
      
 let rec stmt retrs s exitl destl =
   match s with
