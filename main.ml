@@ -41,7 +41,6 @@ let () =
     let p = Is.programme p in
     let p = Rtl.programme p in
     let p = Ertl.programme p in
-    (* Pp.ertl_file p; *)
     let p = Ltl.programme p in
     let code = Lin.programme p in
     let ch = open_out (Filename.chop_suffix file ".go" ^ ".s") in

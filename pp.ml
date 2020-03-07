@@ -260,8 +260,8 @@ let rec print_rtl_instr fmt lab = function
      Format.fprintf fmt "\n\t%a: %a := call %s(%a) --> %a" Label.string_of_label lab
        print_reg_list res f print_reg_list actuals Label.string_of_label l
   | Rtltree.Iprint (args, l) ->
-     Format.fprintf fmt "\n\t%a: call printf --> %a" Label.string_of_label lab
-       Label.string_of_label l
+     Format.fprintf fmt "\n\t%a: call printf %a --> %a" Label.string_of_label lab
+       print_reg_list args Label.string_of_label l
   | Rtltree.Imunop (op, r, l) ->
      Format.fprintf fmt "\n\t%a: %a %a --> %a" Label.string_of_label lab
        print_is_munop op Register.string_of_reg r
