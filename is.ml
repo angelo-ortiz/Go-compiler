@@ -15,8 +15,8 @@ let rec _length_of_type fs = function
      0
   | TTtuple tl ->
      List.fold_left (fun len t -> len + _length_of_type fs t) 0 tl
-  | TTnil ->
-     1 (* TODO: put 0 and check if the untyped nil escapes the type analysis *)
+  | TTnil -> (* the untyped nil can only escape in print statements *)
+     1
   | TTuntyped ->
      assert false
 

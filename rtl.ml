@@ -6,6 +6,8 @@ let graph = ref Label.M.empty
 let locals = Hashtbl.create 32
 let struct_env = ref Asg.Smap.empty
 let number_formals_results = ref []
+let int_fmt = "%d"
+let string_fmt = "%s" 
 
 let listify =
   fun x -> [x]
@@ -224,18 +226,19 @@ let assign srcrs e destl =
 
 let format_or_type = function
   | Asg.TTint ->
-     Format "%d"
+     Format int_fmt
   | Asg.TTstring ->
-     (* TODO: no additional space around strings *)
-     Format "%s"
-  | Asg.TTnil | Asg.TTunit | Asg.TTuntyped | TTtuple _ ->
+     Format string_fmt
+  | Asg.TTnil ->
+     Format "<nil>"
+  | Asg.TTunit | Asg.TTuntyped | TTtuple _ ->
      (* TODO: `pptest.go` doesn't compile: assertion failed: nil? *)
      assert false
   | Asg.TTbool | Asg.TTstruct _ | TTpointer _ as ty ->
      Type ty
      
 let rec translate_print lab types_regs =
-  let rec reverse_lists acc (fmt, regs) = function
+  let rec reverse_lists acc sep_blank (fmt, regs) = function
     | [], [] ->
        if fmt = "" then acc
        else (Format fmt, List.rev regs) :: acc
@@ -245,32 +248,39 @@ let rec translate_print lab types_regs =
        let rxs, in_regs = Utils.split_list in_regs (Is.length_of_type ty) in
        match format_or_type ty with
        | Format nxt_fmt ->
-          let fmt = String.concat " " [fmt; nxt_fmt] in
-          let regs = List.fold_left (fun xs x -> x :: xs) regs rxs in
-          reverse_lists acc (fmt, regs) (types, in_regs)
+          let is_not_string = nxt_fmt <> string_fmt in
+          let sep_blank = is_not_string && sep_blank in
+          let fmt = if fmt = "" then nxt_fmt
+                    else fmt ^ (if sep_blank then " " else "") ^ nxt_fmt
+          in
+          let regs = if nxt_fmt = "<nil>" then regs
+                     else List.fold_left (fun xs x -> x :: xs) regs rxs
+          in
+          reverse_lists acc is_not_string (fmt, regs) (types, in_regs)
        | Type ty as typ ->
-          let acc = if fmt = "" then acc else (Format fmt, List.rev regs) :: acc in
+          let acc = if fmt = "" then acc
+                    else let fmt = if sep_blank then fmt ^ " " else fmt in
+                         (Format fmt, List.rev regs) :: acc
+          in
           let acc = (typ, rxs) :: acc in
-          reverse_lists acc ("", []) (types, in_regs)
+          reverse_lists acc true ("", []) (types, in_regs)
   in
-  let rec loop lab blank = function
+  let rec loop lab = function
     | [] ->
        lab
     | (Format fmt, regs) :: t_r ->
        let fmt_reg = Register.fresh () in
        let lab = generate (Iprint (fmt_reg :: regs, lab)) in
-       let lab = generate (Istring ((if blank then fmt ^ " " else fmt), fmt_reg, lab)) in
-       loop lab true t_r
+       let lab = generate (Istring (fmt, fmt_reg, lab)) in
+       loop lab t_r
     | (Type TTbool, regs) :: t_r ->
        let fmt_bool = Register.fresh () in
        let lab = generate (Iprint ([fmt_bool], lab)) in
-       let neqz_l = generate (Istring ((if blank then "true " else "true"), fmt_bool, lab))
-       in
-       let eqz_l = generate (Istring ((if blank then "false " else "false"), fmt_bool, lab))
-       in
-       loop (generate (Imubranch (Mjz, List.hd regs, eqz_l, neqz_l))) true t_r
+       let neqz_l = generate (Istring ("true", fmt_bool, lab)) in
+       let eqz_l = generate (Istring ("false", fmt_bool, lab)) in
+       loop (generate (Imubranch (Mjz, List.hd regs, eqz_l, neqz_l))) t_r
     | (Type (TTstruct str), fields) :: t_r ->
-       loop (tr_print_struct lab blank str fields) true t_r
+       loop (tr_print_struct lab str fields) t_r
     | (Type (TTpointer ty), ptr) :: t_r ->
        assert (List.tl ptr = []);
        let src = List.hd ptr in
@@ -283,7 +293,7 @@ let rec translate_print lab types_regs =
                          ) 0 (Asg.Smap.find str !struct_env)
             in
             let fields = multi_fresh_int length in
-            let lab = tr_print_struct lab blank str fields in
+            let lab = tr_print_struct lab str fields in
             let lab = generate (Iprint ([fmt_ptr], lab)) in
             let lab = generate (Istring ("&", fmt_ptr, lab)) in
             let lab, _ =
@@ -295,23 +305,24 @@ let rec translate_print lab types_regs =
          | _ ->
             let fmt_reg = Register.fresh () in
             let l = generate (Iprint (fmt_reg :: ptr, lab)) in
-            generate (Istring ((if blank then "%p " else "%p"), fmt_reg, l))
+            generate (Istring ("%p", fmt_reg, l))
        in
        let fmt_nil = Register.fresh () in
        let true_l = generate (Iprint ([fmt_nil], lab)) in
        let true_l =
-         generate (Istring ((if blank then "<nil> " else "<nil>"), fmt_nil, true_l))
+         generate (Istring ("<nil>", fmt_nil, true_l))
        in
-       loop (generate (Imubranch (Mjz, src, true_l, false_l))) true t_r
+       loop (generate (Imubranch (Mjz, src, true_l, false_l))) t_r
     | (Type _, _) :: _ ->
        assert false
   in
-  loop lab false (reverse_lists [] ("", []) types_regs)
+  loop lab (reverse_lists [] false ("", []) types_regs)
 
-and tr_print_struct lab blank str regs =
+and tr_print_struct lab str regs =
+  (* TODO: add spaces btw fields & create specific functions (stack ovfw otherwise) *)
   let fmt_end = Register.fresh () in
   let lab = generate (Iprint ([fmt_end], lab)) in
-  let lab = generate (Istring ((if blank then "} " else "}"), fmt_end, lab)) in
+  let lab = generate (Istring ("}", fmt_end, lab)) in
   let lab = translate_print lab (List.map snd (Asg.Smap.find str !struct_env), regs) in
   let fmt_begin = Register.fresh () in
   let lab = generate (Iprint ([fmt_begin], lab)) in

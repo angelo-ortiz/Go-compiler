@@ -74,6 +74,9 @@ let operand = function
      x_reg mr
   | Spilled n ->
      ind n
+let q_tmp1 = x_reg Register.tmp1
+let b_tmp1 = !% (low_byte_reg Register.tmp1) 
+let q_tmp2 = x_reg Register.tmp2
 
 let ubranch br c2 j_l =
   let n1, x_br = 
@@ -96,7 +99,7 @@ let ubranch br c2 j_l =
        n, jle
   in
   let c2_op = operand c2 in
-  if n1 = 0l then testq c2_op c2_op
+  if n1 = 0l then movq c2_op q_tmp1 ++ testq q_tmp1 q_tmp1
   else cmpq (imm32 n1) c2_op;
   ++ x_br (Label.to_string j_l)
 
@@ -118,10 +121,6 @@ let bbranch br c1 c2 j_l =
   in
   cmpq (operand c1) (operand c2) ++
   x_br (Label.to_string j_l)
-
-let q_tmp1 = x_reg Register.tmp1
-let b_tmp1 = !% (low_byte_reg Register.tmp1) 
-let q_tmp2 = x_reg Register.tmp2
 
 let uset op c =
   let setb, n = 
