@@ -4,8 +4,8 @@ open Rtltree
 open Ertltree
 
 let graph = ref Label.M.empty
-let mem_locals_set = ref Register.S.empty
-let mem_locals = ref []
+let heap_locals_set = ref Register.S.empty
+let heap_locals = ref []
                    
 let generate a =
   let l = Label.fresh () in
@@ -26,7 +26,7 @@ let assoc_arguments args =
 let move src dst l =
   generate (Imbinop (Mmov, src, dst, l))
 
-let pop_param r l =
+let pop_param l r =
   generate (Ipop_param (r, l))
 
 let push_param r l =
@@ -101,7 +101,7 @@ let move_return_call l = function
   | [r] ->
      move Register.rax r l
   | retrs ->
-     List.fold_right pop_param retrs l
+     List.fold_left pop_param l retrs
 
 let move_return_def l = function
   | [] ->
@@ -120,17 +120,17 @@ let instr = function
   | Rtltree.Ibool (b, r, l) ->
      Ibool (b, r, l)
   | Rtltree.Imalloc (r, n, l) ->
-     Iint (n, Register.rdi, generate (
+     Iint (Int64.of_int32 n, Register.rdi, generate (
      Icall ("malloc", 1, generate (
      Imbinop (Mmov, Register.rax, r, l)))))
   | Rtltree.Ilea_local (rxs, ofs, dst, l) ->
      (* registers rxs belong to f.locals *)
      let fst_rx = List.hd rxs in
-     if not (Register.S.mem fst_rx !mem_locals_set) then begin
-         mem_locals := rxs :: !mem_locals;
-         mem_locals_set := List.fold_left (fun set r ->
+     if not (Register.S.mem fst_rx !heap_locals_set) then begin
+         heap_locals := rxs :: !heap_locals;
+         heap_locals_set := List.fold_left (fun set r ->
                                Register.S.add r set
-                             ) !mem_locals_set rxs
+                             ) !heap_locals_set rxs
        end;
      Ilea_local (fst_rx, ofs, dst, l)
   | Rtltree.Ilea (src, ofs, dst, l) -> 
@@ -170,31 +170,31 @@ let instr = function
      Iidiv_imm (n, generate (
      Imbinop   (Mmov, Register.rax, r, l)))))
   | Rtltree.Imunop (Midivir n, r, l) ->
-     Iint    (n, Register.rax, generate (
-     Iidiv   (r, generate (
-     Imbinop (Mmov, Register.rax, r, l)))))
+     Iint      (n, Register.rax, generate (
+     Iidiv     (r, generate (
+     Imbinop   (Mmov, Register.rax, r, l)))))
   | Rtltree.Imunop (Mmodil n, r, l) ->
      Imbinop   (Mmov, r, Register.rax, generate (
      Iidiv_imm (n, generate (
      Imbinop   (Mmov, Register.rdx, r, l)))))
   | Rtltree.Imunop (Mmodir n, r, l) ->
-     Iint    (n, Register.rax, generate (
-     Iidiv   (r, generate (
-     Imbinop (Mmov, Register.rdx, r, l)))))
+     Iint      (n, Register.rax, generate (
+     Iidiv     (r, generate (
+     Imbinop   (Mmov, Register.rdx, r, l)))))
   | Rtltree.Imunop (op, r, l) ->
-     Imunop (translate_munop op, r, l)
+     Imunop    (translate_munop op, r, l)
   | Rtltree.Imbinop (Midiv, r1, r2, l) ->
-     Imbinop (Mmov, r2, Register.rax, generate (
-     Iidiv   (r1, generate (
-     Imbinop (Mmov, Register.rax, r2, l)))))  
+     Imbinop   (Mmov, r2, Register.rax, generate (
+     Iidiv     (r1, generate (
+     Imbinop   (Mmov, Register.rax, r2, l)))))  
   | Rtltree.Iinc_dec (op, r, ofs, l) -> 
-     Iinc_dec (op, r, ofs, l)
+     Iinc_dec  (op, r, ofs, l)
   | Rtltree.Imbinop (Mmod, r1, r2, l) ->
-     Imbinop (Mmov, r2, Register.rax, generate (
-     Iidiv   (r1, generate (
-     Imbinop (Mmov, Register.rdx, r2, l)))))
+     Imbinop   (Mmov, r2, Register.rax, generate (
+     Iidiv     (r1, generate (
+     Imbinop   (Mmov, Register.rdx, r2, l)))))
   | Rtltree.Imbinop (op, r1, r2, l) ->
-     Imbinop (translate_binop op, r1, r2, l)
+     Imbinop   (translate_binop op, r1, r2, l)
   | Rtltree.Imubranch (op, r, true_l, false_l) ->
      Imubranch (op, r, true_l, false_l)
   | Rtltree.Imbbranch (op, r_arg, l_arg, true_l, false_l) ->
@@ -230,10 +230,10 @@ let funct fname (f:Rtltree.rfundef) =
   let entry = fun_entry saved f.formals f.entry res_on_stack in
   fun_exit fname saved f.result f.exit_;
   let body = !graph in
-  let stored_locals = !mem_locals in
+  let stored_locals = !heap_locals in
   graph := Label.M.empty;
-  mem_locals_set := Register.S.empty;
-  mem_locals := [];
+  heap_locals_set := Register.S.empty;
+  heap_locals := [];
   { formals = List.length f.formals; locals = f.locals; stored_locals; entry; body }
     
 let programme p =

@@ -41,7 +41,9 @@ let () =
     let p = Is.programme p in
     let p = Rtl.programme p in
     let p = Ertl.programme p in
+    (* Pp.ertl_file p; *)
     let p = Ltl.programme p in
+    (* Pp.ltl_file p; *)
     let code = Lin.programme p in
     let ch = open_out (Filename.chop_suffix file ".go" ^ ".s") in
     let fmt = Format.formatter_of_out_channel ch in

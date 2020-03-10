@@ -10,7 +10,12 @@ let visited = Hashtbl.create 32
 let labels = Hashtbl.create 16
 let instructions = ref []
 let data_strings = ref []
-                 
+let max_imm32 = Int64.of_int32 Int32.max_int
+let min_imm32 = Int64.of_int32 Int32.min_int
+
+let is_imm32 n =
+  Int64.compare n max_imm32 < 0 && Int64.compare n min_imm32 > 0
+            
 let need_label l =
   Hashtbl.add labels l ()
 
@@ -72,8 +77,11 @@ let ind ?(reg=Register.rbp) ofs =
 let operand = function
   | Reg mr ->
      x_reg mr
-  | Spilled n ->
+  | Spilt n ->
      ind n
+  | Heap _ ->
+     assert false
+    
 let q_tmp1 = x_reg Register.tmp1
 let b_tmp1 = !% (low_byte_reg Register.tmp1) 
 let q_tmp2 = x_reg Register.tmp2
@@ -82,9 +90,9 @@ let ubranch br c2 j_l =
   let n1, x_br = 
     match br with
     | Rtltree.Mjz ->
-       0l, jz
+       0L, jz
     | Rtltree.Mjnz ->
-       0l, jnz
+       0L, jnz
     | Rtltree.Mjei n ->
        n, je
     | Rtltree.Mjnei n ->
@@ -99,8 +107,9 @@ let ubranch br c2 j_l =
        n, jle
   in
   let c2_op = operand c2 in
-  if n1 = 0l then movq c2_op q_tmp1 ++ testq q_tmp1 q_tmp1
-  else cmpq (imm32 n1) c2_op;
+  if n1 = 0L then movq c2_op q_tmp1 ++ testq q_tmp1 q_tmp1
+  else if is_imm32 n1 then cmpq (imm32 (Int64.to_int32 n1)) c2_op
+  else movq (imm64 n1) q_tmp1 ++ cmpq q_tmp1 c2_op;
   ++ x_br (Label.to_string j_l)
 
 let bbranch br c1 c2 j_l =
@@ -140,10 +149,11 @@ let uset op c =
     | _ ->
        assert false
   in
-  cmpq   (imm32 n) c ++
-  setb   b_tmp1 ++
-  movzbq b_tmp1 (register Register.tmp1) ++
-  movq   q_tmp1 c
+  if is_imm32 n then cmpq (imm32 (Int64.to_int32 n)) c
+  else movq (imm64 n) q_tmp1 ++ cmpq q_tmp1 c;
+  ++ setb   b_tmp1
+  ++ movzbq b_tmp1 (register Register.tmp1)
+  ++ movq   q_tmp1 c
   
 let bset op c1 c2 =
   let setb = 
@@ -179,7 +189,7 @@ let rec lin graph l =
   
 and instr graph l = function
   | Iint (n, r, next_l) ->
-     emit l (X86_64.movq (X86_64.imm32 n) (operand r));
+     emit l (X86_64.movq (X86_64.imm64 n) (operand r));
      lin graph next_l
   | Istring (s, r, next_l) ->
      let s_lab = label_of_string s in
@@ -218,9 +228,15 @@ and instr graph l = function
        | Ertltree.Mneg ->
           emit l (negq c_op)
        | Ertltree.Maddi n ->
-          emit l (addq (imm32 n) c_op)
+          let code = if is_imm32 n then addq (imm32 (Int64.to_int32 n)) c_op
+                     else movq (imm64 n) q_tmp1 ++ addq q_tmp1 c_op
+          in
+          emit l code
        | Ertltree.Mimuli n ->
-          emit l (imulq (imm32 n) c_op)
+          let code = if is_imm32 n then imulq (imm32 (Int64.to_int32 n)) c_op
+                     else movq (imm64 n) q_tmp1 ++ imulq q_tmp1 c_op
+          in
+          emit l code
        | Ertltree.Minc ->
           emit l (incq c_op)
        | Ertltree.Mdec ->
@@ -231,7 +247,7 @@ and instr graph l = function
      end;
      lin graph next_l
   | Iidiv_imm (n, next_l) -> (* idiv does not take immediate values *)
-     emit l (movq (imm32 n) q_tmp1 ++ cqto ++ idivq q_tmp1);
+     emit l (movq (imm64 n) q_tmp1 ++ cqto ++ idivq q_tmp1);
      lin graph next_l
   | Iidiv (c, next_l) ->
      emit l (cqto ++ idivq (operand c));

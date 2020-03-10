@@ -8,6 +8,7 @@ open Colouring
 open Ltltree
 
 let graph = ref Label.M.empty
+let heap_regs = ref []
    
 let generate a =
   let l = Label.fresh () in
@@ -21,22 +22,25 @@ let write colours r l =
   match lookup colours r with
   | Reg mr ->
      mr, l
-  | Spilled n ->
-     Register.tmp1, generate (Imbinop (Mmov, Reg Register.tmp1, Spilled n, l))
+  | Spilt n ->
+     Register.tmp1, generate (Imbinop (Mmov, Reg Register.tmp1, Spilt n, l))
+  | Heap _ ->
+     assert false
 
 let read colours r mr f =
   match lookup colours r with
   | Reg mr ->
      f mr
-  | Spilled n ->
-     Imbinop (Mmov, Spilled n, Reg mr, generate (f mr))
+  | Spilt n ->
+     Imbinop (Mmov, Spilt n, Reg mr, generate (f mr))
+  | Heap _ ->
+     assert false
     
 let read1 colours r f =
   read colours r Register.tmp1 f
 
 let read2 colours r1 r2 f =
-  read colours r1 Register.tmp1 (
-      fun mr1 ->
+  read colours r1 Register.tmp1 (fun mr1 ->
       read colours r2 Register.tmp2 (fun mr2 -> f mr1 mr2)
     )
   
@@ -49,9 +53,12 @@ let instr colours frame = function
   | Ertltree.Ibool (b, r, l) ->
      Ibool (b, lookup colours r, l)
   | Ertltree.Ilea_local (rx, ofs, dst, l) ->
-     let local_ofs = match lookup colours rx with | Spilled n -> n | Reg _ -> assert false in
+     let stack_ofs, heap_ofs =
+       match lookup colours rx with | Heap (s, h) -> s, h | _ -> assert false
+     in
      let dst_mr, l = write colours dst l in
-     Ilea (Register.rbp, local_ofs + ofs, dst_mr, l)
+     Iload (Register.rbp, stack_ofs, Register.tmp1, generate (
+     Ilea  (Register.tmp1, heap_ofs, dst_mr, l)))
   | Ertltree.Ilea (src, ofs, dst, l) ->
      read1 colours src (fun src_mr ->
          let dst_mr, l = write colours dst l in
@@ -71,7 +78,7 @@ let instr colours frame = function
   | Ertltree.Imunop (op, r, l) ->
      begin
        match op, lookup colours r with
-       | Mimuli _, (Spilled _ as reg) ->
+       | Mimuli _, (Spilt _ as reg) ->
           read1 colours r (fun mr ->
               Imunop (op, Reg mr, generate (
               Imbinop (Mmov, Reg mr, reg, l)))
@@ -92,12 +99,16 @@ let instr colours frame = function
        match op, lookup colours src, lookup colours dst with
        | Mmov, r1, r2 when r1 = r2 ->
           Igoto l
-       | _, (Spilled _ as r1), (Spilled _ as r2)
-       | Mimul, r1, (Spilled _ as r2) ->
+       | _, (Spilt _ as r1), (Spilt _ as r2)
+       | Mimul, r1, (Spilt _ as r2) ->
           read1 colours dst (fun dst_mr ->
               Imbinop (op, r1, Reg dst_mr, generate (
               Imbinop (Mmov, Reg dst_mr, r2, l)))
             )
+       | Mmov, r1, Heap (stack_ofs, heap_ofs) ->
+          read1 colours src (fun src_mr ->
+          Iload (Register.rbp, stack_ofs, Register.tmp2, generate (
+          Istore (src_mr, Register.tmp2, heap_ofs, l))))
        | _, r1, r2 ->
           Imbinop (op, r1, r2, l)
      end
@@ -108,16 +119,40 @@ let instr colours frame = function
   | Ertltree.Igoto l ->
      Igoto l
   | Ertltree.Ialloc_frame l ->
+     let l =
+       match !heap_regs with
+       | [] ->
+          l
+       | _ ->
+          (* tmp2 is callee-saved: no data loss due to malloc *)
+          let l = generate (Imbinop (Mmov, Reg Register.tmp2, Reg Register.rdi, l)) in
+          let l =
+            List.fold_left (fun l rxs ->
+                let ofs =
+                  match lookup colours (List.hd rxs) with
+                  | Heap (s, _) ->
+                     s
+                  | _ ->
+                     assert false
+                in
+                let l = generate (Istore (Register.rax, Register.rbp, ofs, l)) in
+                let l = generate (Icall ("malloc", l)) in
+                generate (Iint (Int64.of_int (Utils.word_size * List.length rxs),
+                                Reg Register.rdi, l))
+              ) l !heap_regs
+          in
+          generate (Imbinop (Mmov, Reg Register.rdi, Reg Register.tmp2, l))
+     in
      (* always assign %rbp <- %rsp since %rbp could be used in multiple-return functions *)
      Ipush   (Reg rbp, generate (
      Imbinop (Mmov, Reg rsp, Reg rbp, if frame.f_locals = 0 then l else generate (
-     Imunop  (Maddi (Int32.of_int (-frame.f_locals)), Reg rsp, l)))))
+     Imunop  (Maddi (Int64.of_int (-frame.f_locals)), Reg rsp, l)))))
   | Ertltree.Ifree_frame l ->
      Imbinop (Mmov, Reg rbp, Reg rsp, generate (
      Ipop    (rbp, l)))
   | Ertltree.Iget_param (n, r, l) ->
      let mr, l = write colours r l in
-     Imbinop (Mmov, Spilled n, Reg mr, l)
+     Imbinop (Mmov, Spilt n, Reg mr, l)
   | Ertltree.Iset_result (r, ofs, l) ->
      read1 colours r (fun mr ->
          Istore (mr, Register.rbp, ofs, l)
@@ -128,9 +163,9 @@ let instr colours frame = function
      let mr, l = write colours r l in
      Ipop (mr, l)
   | Ertltree.Ialloc_stack (n, l) ->
-     Imunop (Maddi (Int32.neg n) , Reg rsp, l)
+     Imunop (Maddi (Int64.of_int32 (Int32.neg n)), Reg rsp, l)
   | Ertltree.Ifree_stack (n, l) ->
-     Imunop (Maddi n, Reg rsp, l)
+     Imunop (Maddi (Int64.of_int32 n), Reg rsp, l)
   | Ertltree.Ireturn ->
      Ireturn
 
@@ -138,11 +173,15 @@ let funct (f:Ertltree.efundef) =
   let live = Liveness.perform_analysis f.body in
   let intf_graph = Interference.build_graph live in
   let colours, n_locals = Colouring.alloc_registers Register.allocable f.stored_locals intf_graph in
+  heap_regs := f.stored_locals;
   let n_stack_params = max 0 (f.formals - List.length Register.parameters) in
   let frame =
     { f_params = Utils.word_size * n_stack_params; f_locals = Utils.word_size * n_locals }
   in
-  Label.M.iter (fun l i -> let i = instr colours frame i in graph := Label.M.add l i !graph) f.body;
+  Label.M.iter (fun l i ->
+      let i = instr colours frame i in
+      graph := Label.M.add l i !graph
+    ) f.body;
   let body = !graph in
   graph := Label.M.empty;
   { entry = f.entry; body }

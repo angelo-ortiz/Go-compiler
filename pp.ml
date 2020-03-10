@@ -21,29 +21,29 @@ let print_is_munop fmt = function
   | Mdec ->
      Format.fprintf fmt "dec"
   | Maddi n ->
-     Format.fprintf fmt "add $%s" (Int32.to_string n)
+     Format.fprintf fmt "add $%s" (Int64.to_string n)
   | Mimuli n ->
-     Format.fprintf fmt "imul $%s" (Int32.to_string n)
+     Format.fprintf fmt "imul $%s" (Int64.to_string n)
   | Midivil n ->
-     Format.fprintf fmt "idiv ($%s)" (Int32.to_string n)
+     Format.fprintf fmt "idiv ($%s)" (Int64.to_string n)
   | Midivir n ->
-     Format.fprintf fmt "idiv $%s" (Int32.to_string n)
+     Format.fprintf fmt "idiv $%s" (Int64.to_string n)
   | Mmodil n ->
-     Format.fprintf fmt "mod ($%s)" (Int32.to_string n)
+     Format.fprintf fmt "mod ($%s)" (Int64.to_string n)
   | Mmodir n ->
-     Format.fprintf fmt "mod $%s" (Int32.to_string n)
+     Format.fprintf fmt "mod $%s" (Int64.to_string n)
   | Msetei n ->
-     Format.fprintf fmt "sete %s" (Int32.to_string n)
+     Format.fprintf fmt "sete %s" (Int64.to_string n)
   | Msetnei n ->
-     Format.fprintf fmt "setne %s" (Int32.to_string n)
+     Format.fprintf fmt "setne %s" (Int64.to_string n)
   | Msetgi n ->
-     Format.fprintf fmt "setg %s" (Int32.to_string n)
+     Format.fprintf fmt "setg %s" (Int64.to_string n)
   | Msetgei n ->
-     Format.fprintf fmt "setge %s" (Int32.to_string n)
+     Format.fprintf fmt "setge %s" (Int64.to_string n)
   | Msetli n ->
-     Format.fprintf fmt "setl %s" (Int32.to_string n)
+     Format.fprintf fmt "setl %s" (Int64.to_string n)
   | Msetlei n ->
-     Format.fprintf fmt "setle %s" (Int32.to_string n)
+     Format.fprintf fmt "setle %s" (Int64.to_string n)
 
 let print_ertl_munop fmt = function
   | Mnot ->
@@ -55,21 +55,21 @@ let print_ertl_munop fmt = function
   | Mdec ->
      Format.fprintf fmt "dec"
   | Maddi n ->
-     Format.fprintf fmt "add $%s" (Int32.to_string n)
+     Format.fprintf fmt "add $%s" (Int64.to_string n)
   | Mimuli n ->
-     Format.fprintf fmt "imul $%s" (Int32.to_string n)
+     Format.fprintf fmt "imul $%s" (Int64.to_string n)
   | Msetei n ->
-     Format.fprintf fmt "sete %s" (Int32.to_string n)
+     Format.fprintf fmt "sete %s" (Int64.to_string n)
   | Msetnei n ->
-     Format.fprintf fmt "setne %s" (Int32.to_string n)
+     Format.fprintf fmt "setne %s" (Int64.to_string n)
   | Msetgi n ->
-     Format.fprintf fmt "setg %s" (Int32.to_string n)
+     Format.fprintf fmt "setg %s" (Int64.to_string n)
   | Msetgei n ->
-     Format.fprintf fmt "setge %s" (Int32.to_string n)
+     Format.fprintf fmt "setge %s" (Int64.to_string n)
   | Msetli n ->
-     Format.fprintf fmt "setl %s" (Int32.to_string n)
+     Format.fprintf fmt "setl %s" (Int64.to_string n)
   | Msetlei n ->
-     Format.fprintf fmt "setle %s" (Int32.to_string n)
+     Format.fprintf fmt "setle %s" (Int64.to_string n)
 
 let print_is_binop fmt = function
   | Istree.Mmov ->
@@ -126,7 +126,7 @@ let print_ertl_binop fmt = function
 let rec print_is_expr fmt e =
   match e.desc with
   | Istree.IEint n ->
-     Format.fprintf fmt "\n\tEint %s" (Int32.to_string n)
+     Format.fprintf fmt "\n\tEint %s" (Int64.to_string n)
   | Istree.IEstring s ->
      Format.fprintf fmt "\n\tEstring %s" s
   | Istree.IEbool b ->
@@ -163,6 +163,8 @@ let print_is_assign fmt instr =
   match instr.assignee with
   | Istree.Avar v ->
      Format.fprintf fmt "%s" v
+  | Istree.Afield_var (v, n) ->
+     Format.fprintf fmt "%s.%d" v n
   | Istree.Afield (s, n) ->
      Format.fprintf fmt "%a.%d" print_is_expr s n
   | Istree.Adref (s, n) ->
@@ -197,17 +199,17 @@ let print_mubranch fmt = function
   | Mjnz ->
      Format.fprintf fmt "jnz"
   | Mjei n ->
-     Format.fprintf fmt "je $%s" (Int32.to_string n)
+     Format.fprintf fmt "je $%s" (Int64.to_string n)
   | Mjnei n ->
-     Format.fprintf fmt "jnz $%s" (Int32.to_string n)
+     Format.fprintf fmt "jnz $%s" (Int64.to_string n)
   | Mjgi n ->
-     Format.fprintf fmt "jg $%s" (Int32.to_string n)
+     Format.fprintf fmt "jg $%s" (Int64.to_string n)
   | Mjgei n ->
-     Format.fprintf fmt "jge $%s" (Int32.to_string n)
+     Format.fprintf fmt "jge $%s" (Int64.to_string n)
   | Mjli n ->
-     Format.fprintf fmt "jl $%s" (Int32.to_string n)
+     Format.fprintf fmt "jl $%s" (Int64.to_string n)
   | Mjlei n ->
-     Format.fprintf fmt "jle $%s" (Int32.to_string n)
+     Format.fprintf fmt "jle $%s" (Int64.to_string n)
 
 let print_mbbranch fmt = function
   | Mje ->
@@ -230,7 +232,7 @@ let print_reg_list fmt =
 let rec print_rtl_instr fmt lab = function
   | Rtltree.Iint (n, r, l) ->
      Format.fprintf fmt "\n\t%a: mov $%s %a --> %a" Label.string_of_label lab
-       (Int32.to_string n) Register.string_of_reg r
+       (Int64.to_string n) Register.string_of_reg r
        Label.string_of_label l
   | Rtltree.Istring (s, r, l) ->
      Format.fprintf fmt "\n\t%a: mov \"%s\" %a --> %a" Label.string_of_label lab
@@ -293,7 +295,7 @@ let rec print_rtl_instr fmt lab = function
 let print_ertl_instr fct fmt lab = function
   | Ertltree.Iint (n, r, l) ->
      Format.fprintf fmt "\n\t%a: mov $%s %a --> %a\t%a" Label.string_of_label lab
-       (Int32.to_string n) Register.string_of_reg r
+       (Int64.to_string n) Register.string_of_reg r
        Label.string_of_label l fct lab
   | Ertltree.Istring (s, r, l) ->
      Format.fprintf fmt "\n\t%a: mov \"%s\" %a --> %a\t%a" Label.string_of_label lab
@@ -328,7 +330,7 @@ let print_ertl_instr fct fmt lab = function
        Label.string_of_label l fct lab
   | Ertltree.Iidiv_imm (n, l) ->
      Format.fprintf fmt "\n\t%a: idiv %s --> %a\t%a" Label.string_of_label lab
-       (Int32.to_string n) Label.string_of_label l fct lab
+       (Int64.to_string n) Label.string_of_label l fct lab
   | Ertltree.Iidiv (r, l) ->
      Format.fprintf fmt "\n\t%a: idiv %a --> %a\t%a" Label.string_of_label lab
        Register.string_of_reg r Label.string_of_label l fct lab
@@ -385,13 +387,15 @@ let print_ertl_instr fct fmt lab = function
 let print_colour fmt = function
   | Colouring.Reg mr ->
      Register.string_of_reg fmt mr
-  | Colouring.Spilled n ->
-     Format.fprintf fmt "%d(%a)" n Register.string_of_reg Register.rbp  
+  | Colouring.Spilt n ->
+     Format.fprintf fmt "%d(%a)" n Register.string_of_reg Register.rbp
+  | Colouring.Heap (s, h) ->
+     Format.fprintf fmt "s:%d(%a), h:%d" s Register.string_of_reg Register.rbp h
     
 let print_ltl_instr fmt lab = function
   | Ltltree.Iint (n, c, l) ->
      Format.fprintf fmt "\n\t%a: mov $%s %a --> %a" Label.string_of_label lab
-       (Int32.to_string n) print_colour c
+       (Int64.to_string n) print_colour c
        Label.string_of_label l
   | Ltltree.Istring (s, r, l) ->
      Format.fprintf fmt "\n\t%a: mov \"%s\" %a --> %a" Label.string_of_label lab
@@ -422,7 +426,7 @@ let print_ltl_instr fmt lab = function
        Label.string_of_label l 
   | Ltltree.Iidiv_imm (n, l) ->
      Format.fprintf fmt "\n\t%a: idiv %s --> %a" Label.string_of_label lab
-       (Int32.to_string n) Label.string_of_label l
+       (Int64.to_string n) Label.string_of_label l
   | Ltltree.Iidiv (c, l) ->
      Format.fprintf fmt "\n\t%a: idiv %a --> %a" Label.string_of_label lab
        print_colour c Label.string_of_label l

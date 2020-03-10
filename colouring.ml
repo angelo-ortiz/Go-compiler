@@ -2,8 +2,9 @@
 open Interference
 
 type colour =
-  | Spilled of int
   | Reg of Register.t
+  | Spilt of int
+  | Heap of int * int (* stack location, heap location *)
 
 type colouring = colour Register.map
 
@@ -22,25 +23,27 @@ exception Bad_pref_arc
 exception Good_pref_arc of Register.t * Register.t
 exception Found_node of Register.t * Interference.arcs
 exception Found_colour of colour
-exception Found_spilled of int
+exception Found_spilt of int
 exception No_possible_colour
 
 let print_colour fmt = function
   | Reg mr ->
      Format.fprintf fmt "reg %a" Register.string_of_reg mr
-  | Spilled n ->
-     Format.fprintf fmt "spilled %d" n
+  | Spilt n ->
+     Format.fprintf fmt "spilt %d" n
+  | Heap (s, h) ->
+     Format.fprintf fmt "heap s:%d, h:%d" s h
                
 
-let reduce_spilled (spilled, colouring) graph spilled_map =
+let reduce_spilt spilt colouring graph heap_map =
   
   let copy_colour = Stack.create () in
   let n_locals = ref 0
   in
 
   let reduce_arcs arcs =
-    let intfs = Register.S.inter arcs.intfs spilled in
-    let prefs = Register.S.inter arcs.prefs spilled in
+    let intfs = Register.S.inter arcs.intfs spilt in
+    let prefs = Register.S.inter arcs.prefs spilt in
     { intfs; prefs }, not (Register.S.is_empty prefs)
   in
 
@@ -79,19 +82,8 @@ let reduce_spilled (spilled, colouring) graph spilled_map =
   let colour_node sp_colours graph v =
     let min_possible_colour constraints =
       IntSet.fold (fun c n ->
-          if n < c then raise (Found_spilled n) else n + 1
+          if n < c then raise (Found_spilt n) else n + 1
         ) constraints 0
-    in
-    let possible_colours constraints =
-      let rec add i n set =
-        if i >= n then set
-        else add (succ i) n (IntSet.add i set)
-      in
-      snd (
-          IntSet.fold (fun c (prev_c, set) ->
-              c, add (succ prev_c) c set
-            ) constraints (-1, IntSet.empty)
-        )
     in
     let neigh_colours v =
       let neighs = (Register.M.find v graph).intfs in
@@ -102,38 +94,9 @@ let reduce_spilled (spilled, colouring) graph spilled_map =
           with Not_found -> cols
         ) neighs IntSet.empty
     in
-    try
-      let contigs = Register.M.find v spilled_map in
-      let constraints = List.map neigh_colours contigs in
-      let fst_constr, rem_constr = match constraints with | x :: xs -> x, xs | [] -> assert false in
-      let fst_allowed = possible_colours fst_constr in
-      let fst_colour =
-        try
-          IntSet.iter (fun n ->
-              try
-                let n' = ref (succ n) in
-                List.iter (fun constr -> (* check incompatibilities *)
-                    if !n' >= !n_locals then raise (Found_spilled n);
-                    if IntSet.mem !n' constr then raise No_possible_colour;
-                    incr n'
-                  ) rem_constr;
-                raise (Found_spilled n)
-              with No_possible_colour -> ()
-            ) fst_allowed;
-          !n_locals
-        with Found_spilled n -> n
-      in
-      let sp_colours, next_colour =
-        List.fold_left (fun (sc, v_c) v ->
-            Register.M.add v v_c sc, succ v_c
-          ) (sp_colours, fst_colour) contigs
-      in
-      n_locals := max next_colour !n_locals;
-      sp_colours
-    with Not_found ->
-      let v_c = min_possible_colour (neigh_colours v) in
-      n_locals := max (succ v_c) !n_locals;
-      Register.M.add v v_c sp_colours
+    let v_c = min_possible_colour (neigh_colours v) in
+    n_locals := max (succ v_c) !n_locals;
+    Register.M.add v v_c sp_colours
   in
 
   let simplify graph =
@@ -155,7 +118,7 @@ let reduce_spilled (spilled, colouring) graph spilled_map =
 
   let combine_colours =
     Register.M.fold (fun sp n col ->
-        Register.M.add sp (Spilled (Utils.word_size * (n - !n_locals))) col
+        Register.M.add sp (Spilt (Utils.word_size * (n - !n_locals))) col
       )
   in
 
@@ -169,20 +132,34 @@ let reduce_spilled (spilled, colouring) graph spilled_map =
     !curr_sc
   in
 
+  let colour_heap_regs =
+    Register.M.fold (fun _ rxs col ->
+        incr n_locals;
+        let stack_loc = -Utils.word_size * !n_locals in
+        fst (
+            List.fold_left (fun (col, n) hr ->
+                Register.M.add hr (Heap (stack_loc, n)) col, n + Utils.word_size
+              ) (col, 0) rxs
+          )
+      ) heap_map
+  in
+  
   let graph, have_prefs =
     Register.S.fold (fun r (g, hp) ->
         let arcs, has_prefs = reduce_arcs (Register.M.find r graph) in
         Register.M.add r arcs g, if has_prefs then Register.S.add r hp else hp
-      ) spilled (Register.M.empty, Register.S.empty)
+      ) spilt (Register.M.empty, Register.S.empty)
   in
 
-  let c = colour_coalesced (combine_colours (simplify (coalesce graph have_prefs)) colouring)
+  let c = combine_colours (simplify (coalesce graph have_prefs)) colouring in
+  let c = colour_coalesced c in
+  let c = colour_heap_regs c
   in
   
   c, !n_locals
   
   
-let alloc_registers mach_regs spilled_regs graph =
+let alloc_registers mach_regs heap_regs graph =
 
   let k = Register.S.cardinal mach_regs in
   let graph =
@@ -249,7 +226,7 @@ let alloc_registers mach_regs spilled_regs graph =
       Register.S.fold (fun w avail_cols ->
           try 
             match Register.M.find w colours with
-            | Spilled _ -> (* spilled nodes do not appear here yet *)
+            | Spilt _ | Heap _ -> (* spilt/heap nodes do not appear here yet *)
                assert false
             | Reg r ->
                Register.S.remove r avail_cols
@@ -302,8 +279,8 @@ let alloc_registers mach_regs spilled_regs graph =
       ) graph None
   in
 
-  let george_appel colours spilled_regs =
-    let spilled = ref spilled_regs in
+  let george_appel colours spilt_regs =
+    let spilt = ref spilt_regs in
     let curr_g = ref graph in
     let curr_c = ref colours in
     let number_of_regs = ref (Register.M.cardinal graph) in
@@ -372,8 +349,8 @@ let alloc_registers mach_regs spilled_regs graph =
            try
              if not (Register.M.mem v !curr_c) then curr_c := colour_node !curr_c v arcs
            with No_possible_colour ->
-             (* Format.printf "Spilled register %a\n" Register.string_of_reg v; *)
-             spilled := Register.S.add v !spilled
+             (* Format.printf "Spilt register %a\n" Register.string_of_reg v; *)
+             spilt := Register.S.add v !spilt
          end
       | Copy_colour (col, uncol) ->
          (* Format.printf "Action #7: copy colour\n"; *)
@@ -382,10 +359,10 @@ let alloc_registers mach_regs spilled_regs graph =
            (* Format.printf "Coloured %a with %a\n" Register.string_of_reg uncol print_colour c; *)
            curr_c := Register.M.add uncol c !curr_c
          with Not_found ->
-           (* Format.printf "Spilled register %a\n" Register.string_of_reg uncol; *)
-           spilled := Register.S.add uncol !spilled
+           (* Format.printf "Spilt register %a\n" Register.string_of_reg uncol; *)
+           spilt := Register.S.add uncol !spilt
     done;
-    !spilled, !curr_c
+    !spilt, !curr_c
   in
   
   let colours =
@@ -394,20 +371,13 @@ let alloc_registers mach_regs spilled_regs graph =
       ) mach_regs Register.M.empty
   in
   
-  let spilled_regs, spilled_map =
-    let len_gt_1 = function
-      | _ :: _ :: _ ->
-         true
-      | _ ->
-         false
-    in
+  let heap_regs, heap_map =
     List.fold_left (fun (sp, m) rxs ->
-        let add_to_map = len_gt_1 rxs in
-        List.fold_left (fun (sp, m) r ->
-            Register.S.add r sp,
-            if add_to_map then Register.M.add r rxs m else m
-          ) (sp, m) rxs
-      ) (Register.S.empty, Register.M.empty) spilled_regs
+        List.fold_left (fun sp r ->
+            Register.S.add r sp
+          ) sp rxs, Register.M.add (List.hd rxs) rxs m
+      ) (Register.S.empty, Register.M.empty) heap_regs
   in
 
-  reduce_spilled (george_appel colours spilled_regs) graph spilled_map
+  let spilt_regs, colouring = george_appel colours heap_regs in
+  reduce_spilt (Register.S.diff spilt_regs heap_regs) colouring graph heap_map

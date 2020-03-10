@@ -4,10 +4,13 @@ open Interference
 open Colouring
 
 let pp_colour fmt v = function
-  | Spilled n ->
-     Format.fprintf fmt "\n\t%a -> spilled %d" string_of_reg v n
   | Reg r ->
      Format.fprintf fmt "\n\t%a -> reg %a" string_of_reg v string_of_reg r
+  | Spilt n ->
+     Format.fprintf fmt "\n\t%a -> spilt %d" string_of_reg v n
+  | Heap (s, h) ->
+     Format.fprintf fmt "\n\t%a -> heap (s:%d, h:%d)" string_of_reg v s h
+    
 
 let rec pp_set fmt set =
   if Register.S.is_empty set then ()

@@ -6,8 +6,8 @@ type cell =
   | Type of Asg.t_typ
 
 type mubranch =
-  | Mjz | Mjnz | Mjei of int32 | Mjnei of int32
-  | Mjgi of int32 | Mjgei of int32 | Mjli of int32 | Mjlei of int32
+  | Mjz | Mjnz | Mjei of int64 | Mjnei of int64
+  | Mjgi of int64 | Mjgei of int64 | Mjli of int64 | Mjlei of int64
 
 type mbbranch =
   | Mje | Mjne | Mjg | Mjge| Mjl | Mjle
@@ -16,7 +16,7 @@ type inc_dec =
   | IDinc | IDdec
 
 type rinstr =
-  | Iint of int32 * Register.t * Label.t
+  | Iint of int64 * Register.t * Label.t
   | Istring of string * Register.t * Label.t
   | Ibool of bool * Register.t * Label.t
   | Imalloc of Register.t * int32 * Label.t

@@ -2,9 +2,9 @@
 (* Explicit register transfer language grammar *)
 
 type emunop =
-  | Mnot | Mneg | Maddi of int32 | Mimuli of int32 | Minc | Mdec
-  | Msetei of int32 | Msetnei of int32 | Msetgi of int32 | Msetgei of int32
-  | Msetli of int32 | Msetlei of int32
+  | Mnot | Mneg | Maddi of int64 | Mimuli of int64 | Minc | Mdec
+  | Msetei of int64 | Msetnei of int64 | Msetgi of int64 | Msetgei of int64
+  | Msetli of int64 | Msetlei of int64
 
 type embinop =
   | Madd | Msub | Mimul | Mxor
@@ -12,7 +12,7 @@ type embinop =
   | Mmov
            
 type einstr =
-  | Iint of int32 * Register.t * Label.t
+  | Iint of int64 * Register.t * Label.t
   | Istring of string * Register.t * Label.t
   | Ibool of bool * Register.t * Label.t
   | Ilea_local of Register.t * int * Register.t * Label.t (* local Register.t | offset | dst *)
@@ -21,7 +21,7 @@ type einstr =
   | Istore of Register.t * Register.t * int * Label.t (* src | dst | offset *)
   | Icall of string * int * Label.t (* # args in regs *)
   | Imunop of emunop * Register.t * Label.t
-  | Iidiv_imm of int32 * Label.t
+  | Iidiv_imm of int64 * Label.t
   | Iidiv of Register.t * Label.t
   (* | Iinc_dec_local of Rtltree.inc_dec * Register.t list * int * Label.t (\* local Register.t | offset *\) *)
   | Iinc_dec of Rtltree.inc_dec * Register.t * int * Label.t (* src | offset *)

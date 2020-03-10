@@ -4,10 +4,10 @@
 type ident = string
 
 type munop =
-  | Mnot | Mneg | Maddi of int32 | Mimuli of int32 | Minc | Mdec
-  | Midivil of int32 | Midivir of int32 | Mmodil of int32 | Mmodir of int32
-  | Msetei of int32 | Msetnei of int32 | Msetgi of int32 | Msetgei of int32
-  | Msetli of int32 | Msetlei of int32
+  | Mnot | Mneg | Maddi of int64 | Mimuli of int64 | Minc | Mdec
+  | Midivil of int64 | Midivir of int64 | Mmodil of int64 | Mmodir of int64
+  | Msetei of int64 | Msetnei of int64 | Msetgi of int64 | Msetgei of int64
+  | Msetli of int64 | Msetlei of int64
 
 type mbinop =
   | Madd | Msub | Mimul | Midiv | Mmod | Mxor
@@ -21,15 +21,15 @@ type iexpr = {
   }
            
 and idesc =
-  | IEint of int32
+  | IEint of int64
   | IEstring of string
   | IEbool of bool
   | IEnil
   | IElist of iexpr list
   | IEmalloc of int32
   | IEaccess of ident
-  | IEselect of iexpr * int (* C's "." *)
-  | IEload of iexpr * int (* C's "->" *)
+  | IEselect of iexpr * int  (* C's "." *)
+  | IEload of iexpr * int    (* C's "->" *)
   | IEcall of ident * iexpr list
   | IEaddr of iexpr
   | IEunop of munop * iexpr
@@ -44,8 +44,9 @@ type assign = {
 
 and assignee =
   | Avar of ident
-  | Afield of iexpr * int (* e.n <- *)
-  | Adref of iexpr * int (* e->n <- | *e <- *)
+  | Afield_var of ident * int (* e.n <- && e is an lvar *)
+  | Afield of iexpr * int     (* e.n <- *)
+  | Adref of iexpr * int      (* e->n <- | *e <- *)
 
 type istmt =
   | ISexpr of iexpr

@@ -64,7 +64,7 @@ let default_value typ =
     match typ with 
     | TTint ->
        let length = length_of_type typ in
-       { length; desc = IEint 0l; typ } :: acc, size + length
+       { length; desc = IEint 0L; typ } :: acc, size + length
     | TTstring ->
        let length = length_of_type typ in
        { length; desc = IEstring ""; typ } :: acc, size + length
@@ -89,11 +89,11 @@ let default_value typ =
 let rec mk_add e1 e2 =
   match e1.desc, e2.desc with
   | IEint n1, IEint n2 ->
-     IEint (Int32.add n1 n2)
-  | e, IEint 0l | IEint 0l, e ->
+     IEint (Int64.add n1 n2)
+  | e, IEint 0L | IEint 0L, e ->
      e
   | IEunop (Maddi n1, e), IEint n2 | IEint n2, IEunop (Maddi n1, e) ->
-     mk_add (expr_of_primitive (IEint (Int32.add n1 n2)) true) e
+     mk_add (expr_of_primitive (IEint (Int64.add n1 n2)) true) e
   | _, IEint n ->
      IEunop (Maddi n, e1)
   | IEint n, _ ->
@@ -104,26 +104,26 @@ let rec mk_add e1 e2 =
 let rec mk_neg e =
   match e.desc with
   | IEint n ->
-     IEint (Int32.neg n)
+     IEint (Int64.neg n)
   | IEunop (Maddi n, e) ->
-     IEunop (Maddi (Int32.neg n), expr_of_primitive (mk_neg e) true)
+     IEunop (Maddi (Int64.neg n), expr_of_primitive (mk_neg e) true)
   | _ ->
      IEunop (Mneg, e)
     
 and mk_sub e1 e2 =
   match e1.desc, e2.desc with
   | IEint n1, IEint n2 ->
-     IEint (Int32.sub n1 n2)
-  | e, IEint 0l ->
+     IEint (Int64.sub n1 n2)
+  | e, IEint 0L ->
      e
-  | IEint 0l, _ ->
+  | IEint 0L, _ ->
      mk_neg e2
   | IEunop (Maddi n1, e), IEint n2 ->
-     mk_sub e (expr_of_primitive (IEint (Int32.sub n2 n1)) true)
+     mk_sub e (expr_of_primitive (IEint (Int64.sub n2 n1)) true)
   | IEint n2, IEunop (Maddi n1, e) ->
-     mk_sub (expr_of_primitive (IEint (Int32.sub n2 n1)) true) e
+     mk_sub (expr_of_primitive (IEint (Int64.sub n2 n1)) true) e
   | _, IEint n ->
-     IEunop (Maddi (Int32.neg n), e1)
+     IEunop (Maddi (Int64.neg n), e1)
   | IEint n, _ ->
      IEunop (Maddi n, expr_of_primitive (mk_neg e2) true)
   | _ ->
@@ -132,14 +132,14 @@ and mk_sub e1 e2 =
 let rec mk_mul e1 e2 =
   match e1.desc, e2.desc with
   | IEint n1, IEint n2 ->
-     IEint (Int32.mul n1 n2)
+     IEint (Int64.mul n1 n2)
   | IEunop (Mimuli n1, e), IEint n2 | IEint n2, IEunop (Mimuli n1, e) ->
-     mk_mul (expr_of_primitive (IEint (Int32.mul n1 n2)) true) e
-  | e, IEint 1l | IEint 1l, e ->
+     mk_mul (expr_of_primitive (IEint (Int64.mul n1 n2)) true) e
+  | e, IEint 1L | IEint 1L, e ->
      e
-  | _, IEint -1l ->
+  | _, IEint -1L ->
      IEunop (Mneg, e1)
-  | IEint -1l, _ ->
+  | IEint -1L, _ ->
      IEunop (Mneg, e2)
   | _, IEint n ->
      IEunop (Mimuli n, e1)
@@ -150,14 +150,14 @@ let rec mk_mul e1 e2 =
 
 let rec mk_div e1 e2 =
   match e1.desc, e2.desc with
-  | IEint n1, IEint n2 when n2 = 0l -> (* it will be a running-time error *)
+  | IEint n1, IEint n2 when n2 = 0L -> (* it will be a running-time error *)
      IEunop (Midivil n2, e1)
   | IEint n1, IEint n2 ->
-     IEint (Int32.div n1 n2)
-  | e, IEint 1l ->
+     IEint (Int64.div n1 n2)
+  | e, IEint 1L ->
      e
   | IEunop (Midivil n1, e), IEint n2 ->
-     mk_div e (expr_of_primitive (IEint (Int32.mul n1 n2)) true)
+     mk_div e (expr_of_primitive (IEint (Int64.mul n1 n2)) true)
   | _, IEint n ->
      IEunop (Midivil n, e1)
   | IEint n, _ ->
@@ -167,10 +167,10 @@ let rec mk_div e1 e2 =
 
 let rec mk_mod e1 e2 =
   match e1.desc, e2.desc with
-  | IEint n1, IEint n2 when n2 = 0l -> (* it will be a running-time error *)
+  | IEint n1, IEint n2 when n2 = 0L -> (* it will be a running-time error *)
      IEunop (Mmodil n2, e1)
   | IEint n1, IEint n2 ->
-     IEint (Int32.rem n1 n2)
+     IEint (Int64.rem n1 n2)
   | _, IEint n ->
      IEunop (Mmodil n, e1)
   | IEint n, _ ->
@@ -263,7 +263,7 @@ let rec expr e =
 and expr_desc e =
   match e.tdesc with
   | TEint n ->
-     length_of_type e.typ, IEint (Int64.to_int32 n), e.typ
+     length_of_type e.typ, IEint n, e.typ
   | TEstring str ->
      length_of_type e.typ, IEstring str, e.typ
   | TEbool b ->
@@ -330,7 +330,13 @@ let assign_desc = function
   | IEaccess v ->
      Avar v
   | IEselect (str, fd) ->
-     Afield (str, fd)
+     begin
+       match str.desc with
+       | IEaccess v ->
+          Afield_var (v, fd)
+       | _ ->
+          Afield (str, fd)
+     end
   | IEload (str, n) ->
      Adref (str, n)
   | IEint _ | IEstring _ | IEbool _ | IEnil | IEmalloc _
