@@ -23,21 +23,6 @@ let assoc_arguments args =
   in
   assoc ([], []) (args, Register.parameters)
 
-let move src dst l =
-  generate (Imbinop (Mmov, src, dst, l))
-
-let pop_param l r =
-  generate (Ipop_param (r, l))
-
-let push_param r l =
-  generate (Ipush_param (r, l))
-
-let get_param ofs r l =
-  generate (Iget_param (ofs, r, l))
-
-let set_result r ofs l =
-  generate (Iset_result (r, ofs, l))
-
 let translate_munop = function
   | Istree.Mnot ->
      Mnot
@@ -92,6 +77,21 @@ let translate_binop = function
   | Istree.Mmov ->
      Mmov
 
+let move src dst l =
+  generate (Imbinop (Mmov, src, dst, l))
+
+let pop_param r l =
+  generate (Ipop_param (r, l))
+
+let push_param r l =
+  generate (Ipush_param (r, l))
+
+let get_param ofs r l =
+  generate (Iget_param (ofs, r, l))
+
+let set_result r ofs l =
+  generate (Iset_result (r, ofs, l))
+
 (* Functions' return values convention:
  *** if only one 8 B result, then in %rax
  *** otherwise, all the results on the stack and the first one is at the lowest address *)
@@ -101,7 +101,7 @@ let move_return_call l = function
   | [r] ->
      move Register.rax r l
   | retrs ->
-     List.fold_left pop_param l retrs
+     List.fold_right pop_param retrs l
 
 let move_return_def l = function
   | [] ->
@@ -110,7 +110,9 @@ let move_return_def l = function
      move r Register.rax l
   | retrs ->
      let ofs = Utils.word_size lsl 1 in
-     fst (List.fold_left (fun (l, ofs) r -> set_result r ofs l, ofs + Utils.word_size) (l, ofs) retrs)
+     fst (List.fold_left (fun (l, ofs) r ->
+              set_result r ofs l, ofs + Utils.word_size
+            ) (l, ofs) retrs)
 
 let instr = function
   | Rtltree.Iint (n, r, l) ->

@@ -33,13 +33,6 @@ let position_of_loc (b, e) =
   let last_char = e.pos_cnum - e.pos_bol in
   line, first_char, last_char
   
-let rec list_fst_rev rem acc =
-  match rem with 
-  | [] ->
-     List.rev acc
-  | e :: rem ->
-     list_fst_rev rem (fst e :: acc)
-
 let sub_list l start len =
   let rec loop acc i n = function
     | [] ->
@@ -115,6 +108,8 @@ let check_neg_int e =
 	   | Ecst (Cint n) ->
           check_int_size n e.loc;
           { arg with loc = e.loc }
+       | Eunop (Uneg, e) ->
+          e
        | _ ->
           e
 	 end
@@ -231,14 +226,14 @@ let length_of_type = function
   | TTnil | TTuntyped ->
      assert false
 
-let get_ident (e, loc)  =
-  match e.desc, loc with
-  | Eident id, _ ->
-     id, loc
-  | _ as exp, _ ->
+let get_ident e =
+  match e.desc with
+  | Eident id ->
+     id, e.loc
+  | _ as exp ->
 	 syntax_error e.loc
        (Format.asprintf "unexpected expression %s%s%a%s%s, expecting string"
-		  invert yellow string_of_expr exp close close)  
+		  invert yellow string_of_expr exp close close)
 
 let binop_expected_type = function
   | Badd | Bsub | Bmul | Bdiv | Bmod | Blt | Ble | Bgt | Bge ->

@@ -333,7 +333,7 @@ let type_underscores to_be_assigned t_values =
   List.map2 (fun t_e t ->
       match t_e.tdesc with
       | TEident tvar when tvar.id = "_" ->
-         { t_e with tdesc = TEident { tvar with ty = t } }
+         { t_e with tdesc = TEident { tvar with ty = t }; typ = t }
       | _ ->
          t_e
     ) to_be_assigned t_types

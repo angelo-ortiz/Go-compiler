@@ -86,9 +86,9 @@ let rec expr destrs e destl =
   | IEselect (str, n) ->
      let tmps = multi_fresh_int str.length in
      let srcs = Utils.sub_list tmps n e.length in
-     let l = List.fold_right2 (fun src dst l ->
+     let l = List.fold_left2 (fun l src dst ->
                  generate (Imbinop (Mmov, src, dst, l))
-               ) srcs destrs destl
+               ) destl srcs destrs
      in
      expr tmps str l
   | IEload (str, n) ->
@@ -217,9 +217,9 @@ let assign srcrs e destl =
   | Afield (str, n) ->
      let tmps = multi_fresh_int str.length in
      let dstrs = Utils.sub_list tmps n e.length in
-     let l = List.fold_right2 (fun src dst l ->
+     let l = List.fold_left2 (fun l src dst ->
                  generate (Imbinop (Mmov, src, dst, l))
-               ) srcrs dstrs destl
+               ) destl srcrs dstrs
      in
      expr tmps str l
   | Adref (e, n) ->
@@ -345,7 +345,7 @@ let rec translate_print lab ?(seq=true) types_regs =
   loop lab (reverse_lists ("", []) types_regs)
 
 and tr_print_struct lab str regs =
-  (* TODO: function new: pointer + DEFAULT INITIALISATION
+  (* TODO: mandelbrot!!!
      & create specific functions (stack ovfw otherwise) *)
   let fmt_end = Register.fresh () in
   let lab = generate (Iprint ([fmt_end], lab)) in
@@ -353,7 +353,7 @@ and tr_print_struct lab str regs =
   let lab = translate_print lab ~seq:false (List.map snd (Asg.Smap.find str !struct_env), regs) in
   let fmt_begin = Register.fresh () in
   let lab = generate (Iprint ([fmt_begin], lab)) in
-  generate (Istring ("{", fmt_end, lab))
+  generate (Istring ("{", fmt_begin, lab))
      
 let rec stmt retrs s exitl destl =
   match s with
@@ -408,10 +408,10 @@ let rec stmt retrs s exitl destl =
      let l = List.fold_right2 assign srcrs vars destl in
      expr (List.flatten srcrs) e l
   | ISassign (vars, [{ length; desc = IElist values }]) ->
-     let srcrs = List.map (fun v -> multi_fresh_int v.length) vars in
-     let l = List.fold_right2 assign srcrs vars destl in
-     let srcrs = Utils.flatten srcrs in
-     List.fold_left2 (fun l src e -> expr src e l) l srcrs values
+     assert (List.tl vars = []);
+     let srcrs = List.map (fun (v:iexpr) -> multi_fresh_int v.length) values in
+     let l = assign (List.flatten srcrs) (List.hd vars) destl in
+     List.fold_right2 expr srcrs values l
   | ISassign (vars, values) ->
      let srcrs = List.map (fun (v:Istree.iexpr) -> multi_fresh_int v.length) values in
      let l = List.fold_right2 assign srcrs vars destl in

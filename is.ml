@@ -76,15 +76,15 @@ let default_value typ =
        List.fold_left loop (acc, size) (List.map snd str.fields)
     | TTpointer _ ->
        let length = length_of_type typ in
-       { length; desc = IEnil; typ }:: acc, size + length
+       { length; desc = IEnil; typ } :: acc, size + length
     | TTnil | TTunit | TTuntyped | TTtuple _ ->
        assert false
   in
   match loop ([], 0) typ with
   | [e], _ ->
      e
-  | _ as l, length -> (* l is reversed *)
-     { length; desc = IElist l; typ }
+  | _ as l, length ->
+     { length; desc = IElist (List.rev l); typ }
     
 let rec mk_add e1 e2 =
   match e1.desc, e2.desc with
@@ -372,24 +372,52 @@ let rec stmt locals body = function
      locals, ISassign (List.map assign assigned_s, List.map expr values) :: body
   | TSdeclare (vars, values) ->
      if values = [] then
-       locals, List.fold_right (fun v acc ->
+       locals, List.fold_left (fun acc v ->
                    if v.id = "_" then acc
                    else begin
                        let length = length_of_type v.ty in
                        let assignee = Avar (prepend_bnumber v) in
                        ISassign ([{ length; assignee }], [default_value v.ty]) :: acc
                      end
-                 ) vars body
-     else
-       locals,
-       ISassign (
-           List.map (fun v ->
-               let length = length_of_type v.ty in
-               let assignee = Avar (if v.id = "_" then "_" else  prepend_bnumber v) in
-               { length; assignee }
-             ) vars,
-           List.map expr values
-         ) :: body
+                 ) body vars
+     else begin
+         let to_default = ref [] in
+         let rem_values = ref values in
+         let body =
+           ISassign (
+               List.map (fun v ->
+                   let length = length_of_type v.ty in
+                   let id = if v.id = "_" then "_"
+                            else begin
+                                let id' = prepend_bnumber v in
+                                to_default := begin match !rem_values with 
+                                              | val_ :: vals ->
+                                                 rem_values := vals;
+                                                 begin match val_.tdesc with
+                                                 | TEnew ty ->
+                                                    (id', ty) :: !to_default
+                                                 | _ ->
+                                                    !to_default
+                                                 end;
+                                              | [] ->
+                                                 !to_default
+                                              end;
+                                id'
+                              end
+                   in
+                   let assignee = Avar id in
+                   { length; assignee }
+                 ) vars,
+               List.map expr values
+             ) :: body
+         in
+         locals,
+         List.fold_right (fun (id, typ) acc -> (* add default values for the new pointers *)
+             let length = length_of_type typ in
+             let assignee = Adref ({ length; desc = IEaccess id; typ }, 0) in
+             ISassign ([{ length; assignee }], [default_value typ]) :: acc
+           ) !to_default body
+       end
   | TSreturn es ->
      locals, ISreturn (List.map expr es) :: body
   | TSfor (cond, bfor) ->

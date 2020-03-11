@@ -134,7 +134,7 @@ let rec print_is_expr fmt e =
   | Istree.IEnil ->
      Format.fprintf fmt "\n\tEnil"
   | Istree.IElist el ->
-     Format.fprintf fmt "\n\tElist %a" print_is_list el
+     Format.fprintf fmt "\n\tElist [%a]" print_is_list el
   | Istree.IEmalloc n ->
      Format.fprintf fmt "\n\tEmalloc %s" (Int32.to_string n)
   | Istree.IEaccess v ->
@@ -146,15 +146,15 @@ let rec print_is_expr fmt e =
   | Istree.IEcall (f, actuals) ->
      Format.fprintf fmt "\n\tEcall %s(%a)" f print_is_list actuals
   | Istree.IEunop (op, e) ->
-     Format.fprintf fmt "\n\tEunop %a %a" print_is_munop op print_is_expr e
+     Format.fprintf fmt "\n\tEunop %a (%a)" print_is_munop op print_is_expr e
   | Istree.IEaddr e ->
-     Format.fprintf fmt "\n\tEaddr %a" print_is_expr e
+     Format.fprintf fmt "\n\tEaddr (%a)" print_is_expr e
   | Istree.IEbinop (op, e1, e2) ->
-     Format.fprintf fmt "\n\tEbinop %a %a %a" print_is_binop op print_is_expr e1 print_is_expr e2
+     Format.fprintf fmt "\n\tEbinop %a (%a, %a)" print_is_binop op print_is_expr e1 print_is_expr e2
   | Istree.IEand (e1, e2) ->
-     Format.fprintf fmt "\n\tEand %a %a" print_is_expr e1 print_is_expr e2
+     Format.fprintf fmt "\n\tEand (%a, %a)" print_is_expr e1 print_is_expr e2
   | Istree.IEor (e1, e2) ->
-     Format.fprintf fmt "\n\tEor %a %a" print_is_expr e1 print_is_expr e2
+     Format.fprintf fmt "\n\tEor (%a, %a)" print_is_expr e1 print_is_expr e2
 
 and print_is_list fmt =
   print_list fmt print_is_expr
@@ -178,14 +178,14 @@ let rec print_is_stmt fmt = function
   | Istree.ISprint args ->
      Format.fprintf fmt "\n\tSprint (%a)" print_is_list args
   | Istree.ISif (cond, bif, belse) ->
-     Format.fprintf fmt "\n\tSif %a {%a} {%a}" print_is_expr cond print_is_block bif
+     Format.fprintf fmt "\n\tSif (%a) t{%a} e{%a}" print_is_expr cond print_is_block bif
        print_is_block belse
   | Istree.ISassign (vars, values) ->
-     Format.fprintf fmt "\n\tSassign %a = %a" print_is_assign_l vars print_is_list values
+     Format.fprintf fmt "\n\tSassign [%a = %a]" print_is_assign_l vars print_is_list values
   | Istree.ISreturn es ->
-     Format.fprintf fmt "\n\tSreturn %a" print_is_list es
+     Format.fprintf fmt "\n\tSreturn [%a]" print_is_list es
   | Istree.ISfor (cond, b) ->
-     Format.fprintf fmt "\n\tSfor %a {%a}" print_is_expr cond print_is_block b
+     Format.fprintf fmt "\n\tSfor (%a) b{%a}" print_is_expr cond print_is_block b
 
 and print_is_assign_l fmt =
   print_list fmt print_is_assign
@@ -508,13 +508,13 @@ let print_ertl_function fmt f (funct:Ertltree.efundef) =
   Format.fprintf fmt "\n\tentry : %a" Label.string_of_label funct.entry;
   Format.fprintf fmt "\n\tlocals: {%a}" Pretty_printer.pp_set funct.locals;
   Format.printf "%a@]@." pp_label_M_map_ertl funct.body;
-  Format.printf "**  === ERTL done ===  **"
-  (* let live = Liveness.perform_analysis funct.body in
-   * Format.printf "\nLiveness done:\n%a\n\n" (pp_label_M_map_live live) funct.body;
-   * let graph = Interference.build_graph live in
-   * Format.fprintf fmt "\nInterference graph done:\n%a" Pretty_printer.pp_g graph;
-   * let colour, nlocals = Colouring.alloc_registers Register.allocable funct.stored_locals graph in
-   * Format.fprintf fmt "\nColouring done:\n%a\n\n" Pretty_printer.pp_c colour *)
+  Format.printf "**  === ERTL done ===  **";
+  let live = Liveness.perform_analysis funct.body in
+  Format.printf "\nLiveness done:\n%a\n\n" (pp_label_M_map_live live) funct.body;
+  let graph = Interference.build_graph live in
+  Format.fprintf fmt "\nInterference graph done:\n%a" Pretty_printer.pp_g graph;
+  let colour, nlocals = Colouring.alloc_registers Register.allocable funct.stored_locals graph in
+  Format.fprintf fmt "\nColouring done:\n%a\n\n" Pretty_printer.pp_c colour
   
 let print_ltl_function fmt f (funct:Ltltree.lfundef) =
   Format.printf "\n**  === LTL: %s ===  **\n" f;

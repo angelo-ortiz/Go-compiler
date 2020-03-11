@@ -105,6 +105,10 @@ let instr colours frame = function
               Imbinop (op, r1, Reg dst_mr, generate (
               Imbinop (Mmov, Reg dst_mr, r2, l)))
             )
+       | Mmov, Heap (stack_ofs, heap_ofs), r2 ->
+          let dst_mr, l = write colours dst l in
+          Iload (Register.rbp, stack_ofs, Register.tmp2, generate (
+          Iload (Register.tmp2, heap_ofs, dst_mr, l)))
        | Mmov, r1, Heap (stack_ofs, heap_ofs) ->
           read1 colours src (fun src_mr ->
           Iload (Register.rbp, stack_ofs, Register.tmp2, generate (

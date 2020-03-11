@@ -81,9 +81,11 @@ let reduce_spilt spilt colouring graph heap_map =
 
   let colour_node sp_colours graph v =
     let min_possible_colour constraints =
-      IntSet.fold (fun c n ->
-          if n < c then raise (Found_spilt n) else n + 1
-        ) constraints 0
+      try 
+        IntSet.fold (fun c n ->
+            if n < c then raise (Found_spilt n) else n + 1
+          ) constraints 0
+      with Found_spilt n -> n
     in
     let neigh_colours v =
       let neighs = (Register.M.find v graph).intfs in

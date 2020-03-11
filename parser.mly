@@ -126,18 +126,20 @@ stif:
 ;
 
 rev_expr_list:
-  | e = expr { [e, $loc(e)] }
+  | e = expr
+	{ [e] }
   | exps = rev_expr_list COMMA e = expr
-	{ (e, $loc(e)) :: exps }
+	{ e :: exps }
 ;
 
 expr_list:
-  | exps = rev_expr_list { Utils.list_fst_rev exps [] }
+  | exps = rev_expr_list
+	{ List.rev exps }
 ;
 
 assign:
   | vars = rev_expr_list ASSIGN
-	{ List.map Utils.get_ident vars }
+	{ List.rev_map Utils.get_ident vars }
 ;
 
 shstmt:

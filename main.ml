@@ -39,6 +39,7 @@ let () =
     let p = Type_checker.programme p in
     if !type_only then exit 0;
     let p = Is.programme p in
+    (* Pp.is_file p; *)
     let p = Rtl.programme p in
     let p = Ertl.programme p in
     (* Pp.ertl_file p; *)
