@@ -345,8 +345,7 @@ let rec translate_print lab ?(seq=true) types_regs =
   loop lab (reverse_lists ("", []) types_regs)
 
 and tr_print_struct lab str regs =
-  (* TODO: mandelbrot!!!
-     & create specific functions (stack ovfw otherwise) *)
+  (* TODO: create specific functions (stack ovfw otherwise) *)
   let fmt_end = Register.fresh () in
   let lab = generate (Iprint ([fmt_end], lab)) in
   let lab = generate (Istring ("}", fmt_end, lab)) in

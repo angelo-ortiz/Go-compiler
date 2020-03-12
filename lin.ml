@@ -69,7 +69,7 @@ let low_byte_reg r =
   else assert false
 
 let x_reg r =
-  !% (register r)
+  X86_64.(!%) (register r)
 
 let ind ?(reg=Register.rbp) ofs =
   X86_64.ind ~ofs (register reg)
@@ -83,100 +83,102 @@ let operand = function
      assert false
     
 let q_tmp1 = x_reg Register.tmp1
-let b_tmp1 = !% (low_byte_reg Register.tmp1) 
+let b_tmp1 = X86_64.(!%) (low_byte_reg Register.tmp1) 
 let q_tmp2 = x_reg Register.tmp2
 
 let ubranch br c2 j_l =
   let n1, x_br = 
     match br with
     | Rtltree.Mjz ->
-       0L, jz
+       0L, X86_64.jz
     | Rtltree.Mjnz ->
-       0L, jnz
+       0L, X86_64.jnz
     | Rtltree.Mjei n ->
-       n, je
+       n, X86_64.je
     | Rtltree.Mjnei n ->
-       n, jne
+       n, X86_64.jne
     | Rtltree.Mjgi n ->
-       n, jg
+       n, X86_64.jg
     | Rtltree.Mjgei n ->
-       n, jge
+       n, X86_64.jge
     | Rtltree.Mjli n ->
-       n, jl
+       n, X86_64.jl
     | Rtltree.Mjlei n ->
-       n, jle
+       n, X86_64.jle
   in
   let c2_op = operand c2 in
-  if n1 = 0L then movq c2_op q_tmp1 ++ testq q_tmp1 q_tmp1
-  else if is_imm32 n1 then cmpq (imm32 (Int64.to_int32 n1)) c2_op
-  else movq (imm64 n1) q_tmp1 ++ cmpq q_tmp1 c2_op;
+  if n1 = 0L then X86_64.movq c2_op q_tmp1 ++ X86_64.testq q_tmp1 q_tmp1
+  else if is_imm32 n1 then X86_64.cmpq (X86_64.imm32 (Int64.to_int32 n1)) c2_op
+  else X86_64.movq (X86_64.imm64 n1) q_tmp1 ++ X86_64.cmpq q_tmp1 c2_op;
   ++ x_br (Label.to_string j_l)
 
 let bbranch br c1 c2 j_l =
   let x_br = 
     match br with
     | Rtltree.Mje ->
-       je
+       X86_64.je
     | Rtltree.Mjne ->
-       jne
+       X86_64.jne
     | Rtltree.Mjg ->
-       jg
+       X86_64.jg
     | Rtltree.Mjge ->
-       jge
+       X86_64.jge
     | Rtltree.Mjl ->
-       jl
+       X86_64.jl
     | Rtltree.Mjle ->
-       jle
+       X86_64.jle
   in
-  cmpq (operand c1) (operand c2) ++
+  X86_64.cmpq (operand c1) (operand c2) ++
   x_br (Label.to_string j_l)
 
 let uset op c =
-  let setb, n = 
+  let x_set, n = 
     match op with
     | Ertltree.Msetei n ->
-       sete, n
+       X86_64.sete, n
     | Ertltree.Msetnei n ->
-       setne, n
+       X86_64.setne, n
     | Ertltree.Msetgi n ->
-       setg, n
+       X86_64.setg, n
     | Ertltree.Msetgei n ->
-       setge, n
+       X86_64.setge, n
     | Ertltree.Msetli n ->
-       setl, n
+       X86_64.setl, n
     | Ertltree.Msetlei n ->
-       setle, n
+       X86_64.setle, n
     | _ ->
        assert false
   in
-  if is_imm32 n then cmpq (imm32 (Int64.to_int32 n)) c
-  else movq (imm64 n) q_tmp1 ++ cmpq q_tmp1 c;
-  ++ setb   b_tmp1
-  ++ movzbq b_tmp1 (register Register.tmp1)
-  ++ movq   q_tmp1 c
+  begin
+    if is_imm32 n then X86_64.cmpq (X86_64.imm32 (Int64.to_int32 n)) c
+    else X86_64.movq (X86_64.imm64 n) q_tmp1 ++ X86_64.cmpq q_tmp1 c
+  end
+  ++ x_set          b_tmp1
+  ++ X86_64.movzbq  b_tmp1 (register Register.tmp1)
+  ++ X86_64.movq    q_tmp1 c
   
 let bset op c1 c2 =
-  let setb = 
+  let x_set = 
     match op with
     | Ertltree.Msete ->
-       sete
+       X86_64.sete
     | Ertltree.Msetne ->
-       setne
+       X86_64.setne
     | Ertltree.Msetg ->
-       setg
+       X86_64.setg
     | Ertltree.Msetge ->
-       setge
+       X86_64.setge
     | Ertltree.Msetl ->
-       setl
+       X86_64.setl
     | Ertltree.Msetle ->
-       setle
+       X86_64.setle
     | _ ->
        assert false
   in
-  cmpq   c1 c2 ++
-  setb   b_tmp1 ++
-  movzbq b_tmp1 (register Register.tmp1) ++
-  movq   q_tmp1 c2
+  X86_64.cmpq    c1 c2 ++
+  x_set          b_tmp1 ++
+  X86_64.movzbq  b_tmp1 (register Register.tmp1) ++
+  X86_64.movq    q_tmp1 c2
   
 let rec lin graph l =
   if not (Hashtbl.mem visited l) then begin
@@ -184,76 +186,84 @@ let rec lin graph l =
       instr graph l (lookup graph l)
     end else begin
       need_label l;
-      emit (Label.fresh ()) (jmp (Label.to_string l))
+      emit (Label.fresh ()) (X86_64.jmp (Label.to_string l))
     end
   
 and instr graph l = function
   | Iint (n, r, next_l) ->
-     emit l (X86_64.movq (X86_64.imm64 n) (operand r));
+     let op_r = operand r in
+     begin
+       match r with
+       | Reg mr when n = 0L ->
+          emit l (X86_64.xorq op_r op_r)
+       | _ ->
+          emit l (X86_64.movq (X86_64.imm64 n) (operand r))
+     end;
      lin graph next_l
   | Istring (s, r, next_l) ->
      let s_lab = label_of_string s in
-     emit l (leaq (lab s_lab) (register r));
+     emit l (X86_64.leaq (X86_64.lab s_lab) (register r));
      lin graph next_l
   | Ibool (b, c, next_l) ->
      let inst =
        match c with 
        | Reg mr when not b ->
           let c' = x_reg mr in
-          xorq c' c'
+          X86_64.xorq c' c'
        | _ ->
           let n = if b then 1l else 0l in
-          movq (imm32 n) (operand c)
+          X86_64.movq (X86_64.imm32 n) (operand c)
      in
      emit l inst;
      lin graph next_l
   | Ilea (src, ofs, dst, next_l) ->
-     emit l (leaq (ind ~reg:src ofs) (register dst));
+     emit l (X86_64.leaq (ind ~reg:src ofs) (register dst));
      lin graph next_l
   | Iload (src, ofs, dst, next_l) ->
-     emit l (movq (ind ~reg:src ofs) (x_reg dst));
+     emit l (X86_64.movq (ind ~reg:src ofs) (x_reg dst));
      lin graph next_l
   | Istore (src, dst, ofs, next_l) ->
-     emit l (movq (x_reg src) (ind ~reg:dst ofs));
+     emit l (X86_64.movq (x_reg src) (ind ~reg:dst ofs));
      lin graph next_l
   | Icall (f, next_l) ->
-     emit l (call f);
+     emit l (X86_64.call f);
      lin graph next_l
   | Imunop (op, c, next_l) ->
      let c_op = operand c in
      begin
        match op with
        | Ertltree.Mnot ->
-          emit l (notq c_op)
+          emit l (X86_64.notq c_op)
        | Ertltree.Mneg ->
-          emit l (negq c_op)
+          emit l (X86_64.negq c_op)
        | Ertltree.Maddi n ->
-          let code = if is_imm32 n then addq (imm32 (Int64.to_int32 n)) c_op
-                     else movq (imm64 n) q_tmp1 ++ addq q_tmp1 c_op
+          let code = if is_imm32 n then X86_64.addq (X86_64.imm32 (Int64.to_int32 n)) c_op
+                     else X86_64.movq (X86_64.imm64 n) q_tmp1 ++ X86_64.addq q_tmp1 c_op
           in
           emit l code
        | Ertltree.Mimuli n ->
-          let code = if is_imm32 n then imulq (imm32 (Int64.to_int32 n)) c_op
-                     else movq (imm64 n) q_tmp1 ++ imulq q_tmp1 c_op
+          let code = if is_imm32 n then X86_64.imulq (X86_64.imm32 (Int64.to_int32 n)) c_op
+                     else X86_64.movq (X86_64.imm64 n) q_tmp1 ++ X86_64.imulq q_tmp1 c_op
           in
           emit l code
        | Ertltree.Minc ->
-          emit l (incq c_op)
+          emit l (X86_64.incq c_op)
        | Ertltree.Mdec ->
-          emit l (decq c_op)
+          emit l (X86_64.decq c_op)
        | Ertltree.Msetei _ | Ertltree.Msetnei _ | Ertltree.Msetgi _ | Ertltree.Msetgei _
        | Ertltree.Msetli _ | Ertltree.Msetlei _ as op ->
           emit l (uset op c_op)
      end;
      lin graph next_l
   | Iidiv_imm (n, next_l) -> (* idiv does not take immediate values *)
-     emit l (movq (imm64 n) q_tmp1 ++ cqto ++ idivq q_tmp1);
+     emit l (X86_64.movq (X86_64.imm64 n) q_tmp1 ++ X86_64.cqto ++ X86_64.idivq q_tmp1);
      lin graph next_l
   | Iidiv (c, next_l) ->
-     emit l (cqto ++ idivq (operand c));
+     emit l (X86_64.cqto ++ X86_64.idivq (operand c));
      lin graph next_l
   | Iinc_dec (op, r, ofs, next_l) ->
-     let inc_dec = match op with Rtltree.IDinc -> incq | Rtltree.IDdec -> decq in
+     let inc_dec = match op with Rtltree.IDinc -> X86_64.incq | Rtltree.IDdec -> X86_64.decq
+     in
      emit l (inc_dec (ind ~reg:r ofs));
      lin graph next_l
   | Imbinop (op, c1, c2, next_l) ->
@@ -262,15 +272,15 @@ and instr graph l = function
      begin
        match op with
        | Ertltree.Madd ->
-          emit l (addq c1_op c2_op)
+          emit l (X86_64.addq c1_op c2_op)
        | Ertltree.Msub ->
-          emit l (subq c1_op c2_op)
+          emit l (X86_64.subq c1_op c2_op)
        | Ertltree.Mimul ->
-          emit l (imulq c1_op c2_op)
+          emit l (X86_64.imulq c1_op c2_op)
        | Ertltree.Mxor ->
-          emit l (xorq c1_op c2_op)
+          emit l (X86_64.xorq c1_op c2_op)
        | Ertltree.Mmov ->
-          emit l (movq c1_op c2_op)
+          emit l (X86_64.movq c1_op c2_op)
        | Ertltree.Msete | Ertltree.Msetne | Ertltree.Msetg | Ertltree.Msetge
        | Ertltree.Msetl | Ertltree.Msetle as op ->
           emit l (bset op c1_op c2_op)
@@ -287,7 +297,7 @@ and instr graph l = function
      need_label true_l;
      need_label false_l;
      emit l (ubranch br c true_l);
-     emit l (jmp (Label.to_string false_l))
+     emit l (X86_64.jmp (Label.to_string false_l))
   | Imbbranch (br, c1, c2, true_l, false_l) when not (Hashtbl.mem visited false_l) ->
      need_label true_l;
      emit l (bbranch br c1 c2 true_l);
@@ -299,40 +309,41 @@ and instr graph l = function
      need_label true_l;
      need_label false_l;
      emit l (bbranch br c1 c2 true_l);
-     emit l (jmp (Label.to_string false_l))
+     emit l (X86_64.jmp (Label.to_string false_l))
   | Igoto next_l ->
      if Hashtbl.mem visited next_l then begin
          need_label next_l;
-         emit l (jmp (Label.to_string next_l))
+         emit l (X86_64.jmp (Label.to_string next_l))
        end else begin
-         emit l nop;
+         emit l X86_64.nop;
          lin graph next_l
        end
   | Ipush (c, next_l) ->
-     emit l (pushq (operand c));
+     emit l (X86_64.pushq (operand c));
      lin graph next_l
   | Ipop (r, next_l) ->
-     emit l (popq (register r));
+     emit l (X86_64.popq (register r));
      lin graph next_l
   | Ireturn  ->
      emit l ret
 
 let programme p =
   let text =
-    globl "main" ++
+    X86_64.globl "main" ++
       Asg.Smap.fold (fun f { entry; body } txt ->
           let entry, body = Branch.compress entry body in
           lin body entry;
           let instrs = !instructions in
           instructions := [];
-          label f ++
+          X86_64.label f ++
             List.fold_left (fun txt (l, code) ->
                 let txt = code ++ txt in
-                if Hashtbl.mem labels l then label (Label.to_string l) ++ txt else txt
+                if Hashtbl.mem labels l then X86_64.label (Label.to_string l) ++ txt
+                else txt
               ) txt instrs
-        ) p (inline "\n")
+        ) p (X86_64.inline "\n")
   in
   { text; data = List.fold_left (fun data (l, str) ->
-                     data ++ label (Label.to_string l) ++ string str
-                   ) (inline "") !data_strings
+                     data ++ X86_64.label (Label.to_string l) ++ X86_64.string str
+                   ) (X86_64.inline "") !data_strings
   }
