@@ -4,9 +4,9 @@ open Ltltree
 let graph = ref Label.M.empty
 let heap_regs = ref []
    
-let generate a =
+let generate i =
   let l = Label.fresh () in
-  graph := Label.M.add l a !graph;
+  graph := Label.M.add l i !graph;
   l
    
 let lookup colours r =

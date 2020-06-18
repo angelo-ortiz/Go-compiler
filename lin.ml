@@ -5,7 +5,7 @@ open X86_64
 let visited = Hashtbl.create 32
 let labels = Hashtbl.create 16
 let instructions = ref []
-let data_strings = ref []
+let data_strings = Hashtbl.create 32
 let max_imm32 = Int64.of_int32 Int32.max_int
 let min_imm32 = Int64.of_int32 Int32.min_int
 
@@ -21,9 +21,14 @@ let lookup graph l =
 let emit l i =
   instructions := (l, i) :: !instructions
 
-let label_of_string s =
-  let l = Label.fresh () in
-  data_strings := (l, s) :: !data_strings;
+let label_of_string s =  
+  let l =
+    try Hashtbl.find data_strings s
+    with Not_found -> 
+      let l = Label.fresh () in
+      Hashtbl.add data_strings s l;
+      l
+  in
   Label.to_string l
 
 let register r =
@@ -302,7 +307,7 @@ let programme p =
                ) txt instrs
         ) p (X86_64.inline "\n")
   in
-  { text; data = List.fold_left (fun data (l, str) ->
+  { text; data = Hashtbl.fold (fun str l data ->
                      data ++ X86_64.label (Label.to_string l) ++ X86_64.string str
-                   ) (X86_64.inline "") !data_strings
+                   ) data_strings (X86_64.inline "")
   }

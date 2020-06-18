@@ -20,11 +20,11 @@ let info_of_repr elt =
   | Repr i -> i
   | Child _ -> assert false
     
-(* When equally ranked, make [rep2] a child of [rep1] *)
+(* When equally ranked, make [rep1] a child of [rep2] *)
 let link rep1 rep2 =
   let info1 = info_of_repr rep1 in
   let info2 = info_of_repr rep2 in
-  if info1.rank < info2.rank then
+  if info1.rank <= info2.rank then
     rep1.link <- Child rep2
   else begin
       rep2.link <- Child rep1;

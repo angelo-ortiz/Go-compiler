@@ -5,9 +5,9 @@ let graph = ref Label.M.empty
 let heap_locals_set = ref Register.S.empty
 let heap_locals = ref []
                    
-let generate a =
+let generate i =
   let l = Label.fresh () in
-  graph := Label.M.add l a !graph;
+  graph := Label.M.add l i !graph;
   l
 
 let assoc_arguments args =

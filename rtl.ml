@@ -1,13 +1,15 @@
 
 open Rtltree
 
+let ptr_fmt = "%p"
+let nil_fmt = "<nil>"
+let string_fmt = "%s"
+            
 let graph = ref Label.M.empty
 let locals = Hashtbl.create 32
 let struct_env = ref Asg.Smap.empty
-let number_formals_results = ref []
-(* let print_functions = ref Asg.Smap.empty *)
-let int_fmt = "%ld"
-let string_fmt = "%s"
+let number_formals_results = Hashtbl.create 32
+let print_functions : (Istree.ident, Rtltree.rfundef) Hashtbl.t = Hashtbl.create 32
 
 let listify =
   fun x -> [x]
@@ -26,9 +28,9 @@ let multi_fresh_int n =
   in
   loop n []
               
-let generate a =
+let generate i =
   let l = Label.fresh () in
-  graph := Label.M.add l a !graph;
+  graph := Label.M.add l i !graph;
   l
 
 let branch_of_unop = function
@@ -87,7 +89,7 @@ let rec expr destrs e destl =
      in
      expr srcrs str l
   | Istree.IEcall (f, actuals) ->
-     let n_formals, n_results = List.assoc f !number_formals_results in
+     let n_formals, n_results = Hashtbl.find number_formals_results f in
      let r_args = List.map multi_fresh_int n_formals in
      let f_args = List.flatten r_args in
      let lab = generate (Icall (destrs, f, f_args, destl)) in
@@ -215,14 +217,14 @@ let assign srcrs e destl =
      expr [dstr] e l
 
 let format_or_type = function
-  | Asg.TTint -> Format int_fmt
+  | Asg.TTint -> Format "%ld"
   | Asg.TTstring -> Format string_fmt
-  | Asg.TTnil -> Format "<nil>"
+  | Asg.TTnil -> Format nil_fmt
   | Asg.TTunit | Asg.TTuntyped | TTtuple _ -> assert false
   | Asg.TTbool | Asg.TTstruct _ | TTpointer _ as ty -> Type ty
      
-let rec translate_print lab ?(seq=true) types_regs =
-  let rec reverse_sequence acc sep_blank (fmt, regs) = function
+let rec translate_print lab ?(seq=true) ?(generate=generate) types_regs =
+  let rec rev_ty_reg_list acc blank_control (fmt, regs) = function
     | [], [] ->
        if fmt = "" then acc
        else (Format fmt, List.rev regs) :: acc
@@ -232,47 +234,35 @@ let rec translate_print lab ?(seq=true) types_regs =
        let rxs, in_regs = Utils.split_list in_regs (Is.length_of_type ty) in
        match format_or_type ty with
        | Format nxt_fmt ->
-          let is_not_string = nxt_fmt <> string_fmt in
-          let sep_blank = is_not_string && sep_blank in
+          let not_str = nxt_fmt <> string_fmt in
+          let add_blank, nxt_blank_control =
+            match blank_control with
+            | None -> true, None
+            | Some prev_not_str -> not_str && prev_not_str, Some not_str
+          in
           let fmt =
             if fmt = "" then nxt_fmt
-            else fmt ^ (if sep_blank then " " else "") ^ nxt_fmt
+            else fmt ^ (if add_blank then " " else "") ^ nxt_fmt
           in
           let regs =
             if nxt_fmt = "<nil>" then regs
             else List.fold_left (fun xs x -> x :: xs) regs rxs
           in
-          reverse_sequence acc is_not_string (fmt, regs) (types, in_regs)
+          rev_ty_reg_list acc nxt_blank_control (fmt, regs) (types, in_regs)
        | Type ty as typ ->
+          let add_blank, nxt_blank_control =
+            match blank_control with
+            | None -> true, None
+            | Some prev_not_str -> prev_not_str, Some true
+          in
           let acc =
             if fmt = "" then acc
-            else let fmt = if sep_blank then fmt ^ " " else fmt in
-                 (Format fmt, List.rev regs) :: acc
+            else
+              let fmt = if add_blank then fmt ^ " " else fmt in
+              (Format fmt, List.rev regs) :: acc
           in
           let acc = (typ, rxs) :: acc in
-          reverse_sequence acc true ("", []) (types, in_regs)
-  in
-  let rec reverse_fields acc (fmt, regs) = function
-    | [], [] ->
-       if fmt = "" then acc
-       else (Format fmt, List.rev regs) :: acc
-    | [], _ | _, [] ->
-       assert false
-    | ty :: types, in_regs ->
-       let rxs, in_regs = Utils.split_list in_regs (Is.length_of_type ty) in
-       match format_or_type ty with
-       | Format nxt_fmt ->
-          let fmt = if fmt = "" then nxt_fmt else fmt ^ " " ^ nxt_fmt in
-          let regs =
-            if nxt_fmt = "<nil>" then regs
-            else List.fold_left (fun xs x -> x :: xs) regs rxs
-          in
-          reverse_fields acc (fmt, regs) (types, in_regs)
-       | Type ty as typ ->
-          let acc = if fmt = "" then acc else (Format (fmt ^ " "), List.rev regs) :: acc
-          in
-          let acc = (typ, rxs) :: acc in
-          reverse_fields acc ("", []) (types, in_regs)
+          rev_ty_reg_list acc nxt_blank_control ("", []) (types, in_regs)
   in
   let rec loop lab = function
     | [] ->
@@ -282,29 +272,26 @@ let rec translate_print lab ?(seq=true) types_regs =
        let lab = generate (Iprint (fmt_reg :: regs, lab)) in
        let lab = generate (Istring (fmt, fmt_reg, lab)) in
        loop lab t_r
-    | (Type TTbool, regs) :: t_r ->
-       let fmt_bool = Register.fresh () in
-       let lab = generate (Iprint ([fmt_bool], lab)) in
-       let neqz_l = generate (Istring ("true", fmt_bool, lab)) in
-       let eqz_l = generate (Istring ("false", fmt_bool, lab)) in
-       loop (generate (Imubranch (Mjz, List.hd regs, eqz_l, neqz_l))) t_r
+    | (Type TTbool, b) :: t_r ->
+       let src = match b with | [r] -> r | _ -> assert false in
+       let fmt_reg = Register.fresh () in
+       let lab = generate (Iprint ([fmt_reg], lab)) in
+       let neqz_l = generate (Istring ("true", fmt_reg, lab)) in
+       let eqz_l = generate (Istring ("false", fmt_reg, lab)) in
+       loop (generate (Imubranch (Mjz, src, eqz_l, neqz_l))) t_r
     | (Type (TTstruct str), fields) :: t_r ->
-       loop (tr_print_struct lab str fields) t_r
+       loop (tr_print_struct generate lab str fields) t_r
     | (Type (TTpointer ty), ptr) :: t_r ->
-       assert (List.tl ptr = []);
-       let src = List.hd ptr in
+       let src = match ptr with | [r] -> r | _ -> assert false in
+       let fmt_reg = Register.fresh () in
        let false_l =
          match ty with
          | TTstruct str ->
-            let fmt_ptr = Register.fresh () in
-            let length = List.fold_left (fun acc (_, ty) ->
-                             acc + Is.length_of_type ty
-                         ) 0 (Asg.Smap.find str !struct_env)
-            in
+            let length = Is.length_of_type ty in
             let fields = multi_fresh_int length in
-            let lab = tr_print_struct lab str fields in
-            let lab = generate (Iprint ([fmt_ptr], lab)) in
-            let lab = generate (Istring ("&", fmt_ptr, lab)) in
+            let lab = tr_print_struct generate lab str fields in
+            let lab = generate (Iprint ([fmt_reg], lab)) in
+            let lab = generate (Istring ("&", fmt_reg, lab)) in
             let lab, _ =
               List.fold_left (fun (l, n) dst ->
                   let i = Iload (src, n, dst, l) in
@@ -312,32 +299,45 @@ let rec translate_print lab ?(seq=true) types_regs =
                 ) (lab, 0) fields
             in lab
          | _ ->
-            let fmt_reg = Register.fresh () in
             let l = generate (Iprint (fmt_reg :: ptr, lab)) in
-            generate (Istring ("%p", fmt_reg, l))
+            generate (Istring (ptr_fmt, fmt_reg, l))
        in
-       let fmt_nil = Register.fresh () in
-       let true_l = generate (Iprint ([fmt_nil], lab)) in
-       let true_l =
-         generate (Istring ("<nil>", fmt_nil, true_l))
-       in
+       let true_l = generate (Iprint ([fmt_reg], lab)) in
+       let true_l = generate (Istring ("<nil>", fmt_reg, true_l)) in
        loop (generate (Imubranch (Mjz, src, true_l, false_l))) t_r
     | (Type _, _) :: _ ->
        assert false
   in
-  let reverse_lists = if seq then reverse_sequence [] false else reverse_fields [] in
-  loop lab (reverse_lists ("", []) types_regs)
+  let blank_control = if seq then Some false else None in
+  loop lab (rev_ty_reg_list [] blank_control ("", []) types_regs)
 
-and tr_print_struct lab str regs =
-  (* TODO: create specific functions (stack ovfw otherwise) *)
-  let fmt_end = Register.fresh () in
-  let lab = generate (Iprint ([fmt_end], lab)) in
-  let lab = generate (Istring ("}", fmt_end, lab)) in
-  let lab = translate_print lab ~seq:false (List.map snd (Asg.Smap.find str !struct_env), regs)
-  in
-  let fmt_begin = Register.fresh () in
-  let lab = generate (Iprint ([fmt_begin], lab)) in
-  generate (Istring ("{", fmt_begin, lab))
+and tr_print_struct generate lab str regs =
+  let print_str = ".print_" ^ str in
+  if not (Hashtbl.mem print_functions print_str) then begin
+      let graph = ref Label.M.empty in
+      let fun_ph =
+        { formals = multi_fresh_list regs; result = []; locals = Register.S.empty;
+          entry = Label.fresh (); exit_ = Label.fresh (); body = !graph }
+      in
+      let generate i =
+        let l = Label.fresh () in
+        graph := Label.M.add l i !graph;
+        l
+      in
+      Hashtbl.add print_functions print_str fun_ph;
+      let fmt_end = Register.fresh () in
+      let lab = generate (Iprint ([fmt_end], fun_ph.exit_)) in
+      let lab = generate (Istring ("}", fmt_end, lab)) in
+      let lab =
+        translate_print lab ~seq:false ~generate
+          (List.map snd (Asg.Smap.find str !struct_env), regs)
+      in
+      let fmt_begin = Register.fresh () in
+      let lab = generate (Iprint ([fmt_begin], lab)) in
+      let entry = generate (Istring ("{", fmt_begin, lab)) in
+      Hashtbl.replace print_functions print_str { fun_ph with entry; body = !graph }
+    end;
+  generate (Icall ([], print_str, regs, lab))
      
 let rec stmt retrs s exitl destl =
   match s with
@@ -364,7 +364,7 @@ let rec stmt retrs s exitl destl =
           assert false
      end
   | Istree.IScall (f, actuals) ->
-     let _, l_results = List.assoc f !number_formals_results in
+     let _, l_results = Hashtbl.find number_formals_results f in
      let n_results = Utils.sum_of_list l_results in
      let destrs = multi_fresh_int n_results in
      (* the type is unused in `expr` so TTuntyped should suffice *)
@@ -428,9 +428,11 @@ let funct (f:Istree.ifundef) =
     locals = local_vars; entry; exit_; body } 
   
 let programme (p:Istree.iprogramme) =
-  let add_retrs f (def:Istree.ifundef) acc =
-    (f, (List.map snd def.formals, def.result)) :: acc
+  let add_retrs f (def:Istree.ifundef) =
+    Hashtbl.add number_formals_results f (List.map snd def.formals, def.result)
   in
   struct_env := p.structs;
-  number_formals_results := Asg.Smap.fold add_retrs p.functions [];
-  { structs = p.structs; functions = Asg.Smap.map funct p.functions }
+  Asg.Smap.iter add_retrs p.functions;
+  let functions = Asg.Smap.map funct p.functions in
+  let functions = Hashtbl.fold Asg.Smap.add print_functions functions in
+  { structs = p.structs; functions }
