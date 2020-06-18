@@ -4,7 +4,7 @@ CMO=asg.cmo utils.cmo lexer.cmo parser.cmo type_checker.cmo \
 GENERATED=lexer.ml parser.ml parser.mli
 BIN=pgoc
 TEST=./test.sh
-FLAGS=-I +zarith
+FLAGS=-I +../zarith
 
 all: $(BIN) test_all
 

@@ -17,10 +17,8 @@ let fresh contents =
 
 let info_of_repr elt =
   match elt.link with
-  | Repr i ->
-     i
-  | Child _ ->
-     assert false
+  | Repr i -> i
+  | Child _ -> assert false
     
 (* When equally ranked, make [rep2] a child of [rep1] *)
 let link rep1 rep2 =

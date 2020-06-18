@@ -27,12 +27,9 @@ exception Found_spilt of int
 exception No_possible_colour
 
 let print_colour fmt = function
-  | Reg mr ->
-     Format.fprintf fmt "reg %a" Register.string_of_reg mr
-  | Spilt n ->
-     Format.fprintf fmt "spilt %d" n
-  | Heap (s, h) ->
-     Format.fprintf fmt "heap s:%d, h:%d" s h
+  | Reg mr -> Format.fprintf fmt "reg %a" Register.string_of_reg mr
+  | Spilt n -> Format.fprintf fmt "spilt %d" n
+  | Heap (s, h) -> Format.fprintf fmt "heap s:%d, h:%d" s h
                
 
 let reduce_spilt spilt colouring graph heap_map =
@@ -70,12 +67,9 @@ let reduce_spilt spilt colouring graph heap_map =
         let arcs = Register.M.find v graph in
         let deg = Register.S.cardinal arcs.intfs in
         match m_n with
-        | None ->
-           Some (v, arcs, deg)
-        | Some (_, _, d) when deg < d ->
-           Some (v, arcs, deg)
-        | m_s ->
-           m_s
+        | None -> Some (v, arcs, deg)
+        | Some (_, _, d) when deg < d -> Some (v, arcs, deg)
+        | m_s -> m_s
       ) graph None
   in
 
@@ -106,7 +100,10 @@ let reduce_spilt spilt colouring graph heap_map =
     let to_colour = Stack.create () in
     while not (Register.M.is_empty !curr_g) do
       let min_node, neighs =
-        match min_degree_node !curr_g with | Some (v, arcs, _) -> v, arcs | None -> assert false in
+        match min_degree_node !curr_g with
+        | Some (v, arcs, _) -> v, arcs
+        | None -> assert false
+      in
       curr_g := Interference.remove_node min_node neighs !curr_g;
       Stack.push min_node to_colour
     done;
@@ -208,19 +205,15 @@ let alloc_registers mach_regs heap_regs graph =
                 /. (float_of_int (Register.M.find v initial_degrees))
               in
               match min_n with
-              | None ->
-                 Some (v, cost)
-              | Some (_, c) when cost < c ->
-                 Some (v, cost)
-              | m_n ->
-                 m_n
+              | None -> Some (v, cost)
+              | Some (_, c) when cost < c -> Some (v, cost)
+              | m_n -> m_n
             end
         ) graph None
-    in match min_node with
-       | Some (v, _) ->
-          v
-       | None ->
-          assert false 
+    in
+    match min_node with
+    | None -> assert false
+    | Some (v, _) -> v
   in
 
   let colour_node colours v arcs =
@@ -271,12 +264,9 @@ let alloc_registers mach_regs heap_regs graph =
             let deg = Register.S.cardinal arcs.intfs in
             if deg >= k then min_n
             else match min_n with
-                 | None ->
-                    Some (v, deg)
-                 | Some (s, d) when deg < d ->
-                    Some (v, deg)
-                 | m_n ->
-                    m_n
+                 | None -> Some (v, deg)
+                 | Some (s, d) when deg < d -> Some (v, deg)
+                 | m_n -> m_n
           end
       ) graph None
   in
@@ -294,10 +284,8 @@ let alloc_registers mach_regs heap_regs graph =
          begin
            (* Format.printf "Action #1: simplify\n"; *)
            match min_pref_disconnected_node !curr_g with
-           | None ->
-              Stack.push Coalesce stack
-           | Some (v, _) ->
-              Stack.push (Select v) stack
+           | None -> Stack.push Coalesce stack
+           | Some (v, _) -> Stack.push (Select v) stack
          end
       | Select v ->
          begin

@@ -49,23 +49,17 @@ let sub_list l start len =
 
 let split_list l n =
   let rec loop acc i = function
-    | l when i = 0 ->
-       List.rev acc, l
-    | [] ->
-       raise (Invalid_argument "Not enough elements in the list")
-    | x :: xs ->
-       loop (x :: acc) (pred i) xs
+    | l when i = 0 -> List.rev acc, l
+    | [] -> raise (Invalid_argument "Not enough elements in the list")
+    | x :: xs -> loop (x :: acc) (pred i) xs
   in
   loop [] n l
 
 let flatten l =
   let rec loop acc = function
-    | [], [] ->
-       acc
-    | x :: l, rem ->
-       loop ([x] :: acc) (l, rem)
-    | [], l :: rem ->
-       loop acc (l, rem)
+    | [], [] -> acc
+    | x :: l, rem -> loop ([x] :: acc) (l, rem)
+    | [], l :: rem -> loop acc (l, rem)
   in loop [] ([], l)
 
 let sum_of_list =
@@ -74,7 +68,7 @@ let sum_of_list =
 let check_package pkg func func_loc =
   match pkg.desc with
   | Eident id when id = "fmt" ->
-	 if func <> "Print" then
+     if func <> "Print" then
        syntax_error func_loc
          (Format.sprintf "unexpected function %s%s%s%s%s, expecting Print"
             invert yellow func close close)
@@ -104,15 +98,11 @@ let check_neg_int e =
   match e.desc with
   | Eunop (Uneg, arg) ->
      begin
-	   match arg.desc with
-	   | Ecst (Cint n) ->
-          check_int_size n e.loc;
-          { arg with loc = e.loc }
-       | Eunop (Uneg, e) ->
-          e
-       | _ ->
-          e
-	 end
+       match arg.desc with
+       | Ecst (Cint n) -> check_int_size n e.loc; { arg with loc = e.loc }
+       | Eunop (Uneg, e) -> e
+       | _ -> e
+     end
   | _ ->
      assert false
 
@@ -126,12 +116,18 @@ let string_of_unop fmt = function
   | Uaddr -> Format.fprintf fmt "&"
 													  
 let string_of_binop fmt = function
-  | Badd -> Format.fprintf fmt "+" | Bsub -> Format.fprintf fmt "-"
-  | Bmul -> Format.fprintf fmt "*" | Bdiv -> Format.fprintf fmt "/"
-  | Bmod -> Format.fprintf fmt "%%" | Beq -> Format.fprintf fmt "=="
-  | Bneq -> Format.fprintf fmt "!=" | Blt -> Format.fprintf fmt "<"
-  | Ble -> Format.fprintf fmt "<=" | Bgt -> Format.fprintf fmt ">"
-  | Bge -> Format.fprintf fmt ">=" | Band -> Format.fprintf fmt "&&"
+  | Badd -> Format.fprintf fmt "+"
+  | Bsub -> Format.fprintf fmt "-"
+  | Bmul -> Format.fprintf fmt "*"
+  | Bdiv -> Format.fprintf fmt "/"
+  | Bmod -> Format.fprintf fmt "%%"
+  | Beq -> Format.fprintf fmt "=="
+  | Bneq -> Format.fprintf fmt "!="
+  | Blt -> Format.fprintf fmt "<"
+  | Ble -> Format.fprintf fmt "<="
+  | Bgt -> Format.fprintf fmt ">"
+  | Bge -> Format.fprintf fmt ">="
+  | Band -> Format.fprintf fmt "&&"
   | Bor -> Format.fprintf fmt "||"
 									  
 let string_of_constant fmt = function
@@ -159,27 +155,20 @@ let rec string_of_expr fmt = function
 
 let rec string_of_type_list fmt tl =
   Format.fprintf fmt "(";
-  List.iteri
-    (fun i t -> Format.fprintf fmt "%s%a" (if i > 0 then "," else "") string_of_type t) tl;
+  List.iteri (fun i t ->
+      Format.fprintf fmt "%s%a" (if i > 0 then "," else "") string_of_type t
+    ) tl;
   Format.fprintf fmt ")"
   
 and string_of_type fmt = function
-  | TTint ->
-     Format.fprintf fmt "int"
-  | TTbool ->
-     Format.fprintf fmt "bool"
-  | TTstring ->
-     Format.fprintf fmt "str"
-  | TTnil | TTuntyped ->
-     assert false
-  | TTunit ->
-     Format.fprintf fmt "unit"
-  | TTstruct s ->
-     Format.fprintf fmt "%s" s
-  | TTtuple tl ->
-     string_of_type_list fmt tl
-  | TTpointer t ->
-     Format.fprintf fmt "*%a" string_of_type t
+  | TTint -> Format.fprintf fmt "int"
+  | TTbool -> Format.fprintf fmt "bool"
+  | TTstring -> Format.fprintf fmt "str"
+  | TTnil | TTuntyped -> assert false
+  | TTunit -> Format.fprintf fmt "unit"
+  | TTstruct s -> Format.fprintf fmt "%s" s
+  | TTtuple tl -> string_of_type_list fmt tl
+  | TTpointer t -> Format.fprintf fmt "*%a" string_of_type t
 
 let rec string_of_texpr fmt te =
   match te.tdesc with
@@ -217,31 +206,24 @@ let rec string_of_list fmt string_of_el = function
      Format.fprintf fmt "%a %a" string_of_el x partial xs
     
 let length_of_type = function
-  | TTint | TTstring | TTbool | TTstruct _ | TTpointer _ ->
-     1
-  | TTunit ->
-     0
-  | TTtuple tl ->
-     List.length tl
-  | TTnil | TTuntyped ->
-     assert false
+  | TTint | TTstring | TTbool | TTstruct _ | TTpointer _ -> 1
+  | TTunit -> 0
+  | TTtuple tl -> List.length tl
+  | TTnil | TTuntyped -> assert false
 
 let get_ident e =
   match e.desc with
   | Eident id ->
      id, e.loc
   | _ as exp ->
-	 syntax_error e.loc
+     syntax_error e.loc
        (Format.asprintf "unexpected expression %s%s%a%s%s, expecting string"
 		  invert yellow string_of_expr exp close close)
 
 let binop_expected_type = function
-  | Badd | Bsub | Bmul | Bdiv | Bmod | Blt | Ble | Bgt | Bge ->
-     Some TTint
-  | Beq | Bneq ->
-     None
-  | Band | Bor ->
-     Some TTbool
+  | Badd | Bsub | Bmul | Bdiv | Bmod | Blt | Ble | Bgt | Bge -> Some TTint
+  | Beq | Bneq -> None
+  | Band | Bor -> Some TTbool
   
 let verify_operand_type op loc term = function
   | None, t | Some TTnil, (TTpointer _ as t)  | Some (TTpointer _ as t), TTnil ->
@@ -258,25 +240,18 @@ let verify_operand_type op loc term = function
 
 let single_texpr_compatible_types ty_ref ty_act loc f_msg =
   match ty_ref, ty_act with
-  | t_r, t_a when t_r = t_a ->
-     ()
-  | TTpointer _, TTnil ->
-     ()
-  | TTuntyped, (TTint | TTstring | TTbool | TTstruct _ | TTpointer _) ->
-     ()
-  | TTuntyped, TTnil ->
-     type_error loc (Format.asprintf "use of untyped nil")        
-  | TTuntyped, _ | _, (TTunit | TTuntyped | TTtuple _) ->
-     assert false
-  | e_f, t_a ->
-     type_error loc (f_msg ())
+  | t_r, t_a when t_r = t_a -> ()
+  | TTpointer _, TTnil
+  | TTuntyped, (TTint | TTstring | TTbool | TTstruct _ | TTpointer _) -> ()
+  | TTuntyped, TTnil -> type_error loc (Format.asprintf "use of untyped nil")
+  | TTuntyped, _ | _, (TTunit | TTuntyped | TTtuple _) -> assert false
+  | e_f, t_a -> type_error loc (f_msg ())
     
 let multi_texpr_compatible_types ty_ref (te_act:Asg.texpr) f_msg =
   match ty_ref, te_act.typ with
   | t_r, t_a when t_r = t_a ->
      te_act
-  | TTpointer _, TTnil ->
-     (* TTnil's "unification" *)
+  | TTpointer _, TTnil -> (* TTnil's "unification" *)
      { te_act with typ = ty_ref }
   | TTuntyped, (TTint | TTstring | TTbool | TTstruct _ | TTpointer _) ->
      (* useless for checking of function parameters *)
@@ -321,15 +296,18 @@ let rec scan_texpr env use_queue expr =
      scan_texpr env use_queue r
           
 and scan_texpr_list env use_queue texpr_list =
-  List.fold_left (fun (env, queue) exp -> scan_texpr env queue exp) (env, use_queue) texpr_list
+  List.fold_left (fun (env, queue) exp ->
+      scan_texpr env queue exp
+    ) (env, use_queue) texpr_list
 
 let rec reduce_queue env new_queue = function
   | [] ->
      env, new_queue
   | id :: queue ->
      let env, added =
-       try let occ, loc = Smap.find id env in
-           Smap.add id (occ + 1, loc) env, true
+       try
+         let occ, loc = Smap.find id env in
+         Smap.add id (occ + 1, loc) env, true
        with Not_found ->
          env, false
      in
@@ -357,14 +335,16 @@ let rec scan_tstmt loc env use_queue exp_rtype = function
   | TSassign (to_be_assigned, values) ->
      (* left variables do not count *)
      let used_texprs =
-       List.filter (fun exp -> match exp.tdesc with | TEident _ -> false | _ -> true) to_be_assigned in
+       List.filter (fun exp ->
+           match exp.tdesc with | TEident _ -> false | _ -> true
+         ) to_be_assigned
+     in
      let env, use_queue = scan_texpr_list env use_queue used_texprs in
      let env, use_queue = scan_texpr_list env use_queue values in
      env, use_queue, false
   | TSdeclare (vars, values) ->
      let env, use_queue = scan_texpr_list env use_queue values in
-     List.fold_left
-       (fun env v ->
+     List.fold_left (fun env v ->
          if v.id = "_" then env else Smap.add v.id (0, v.loc) env
        ) env vars, use_queue, false
   | TSreturn te_actuals ->
@@ -374,10 +354,8 @@ let rec scan_tstmt loc env use_queue exp_rtype = function
        | [te_act] ->
           let act_rtype =
             match te_act.typ with
-            | TTtuple tl ->
-               tl
-            | _ as t ->
-               [t]
+            | TTtuple tl -> tl
+            | _ as t -> [t]
           in
           let cmp_exp_act = compare (List.length exp_rtype) (List.length act_rtype) in
           if cmp_exp_act = 0 then begin
@@ -399,8 +377,7 @@ let rec scan_tstmt loc env use_queue exp_rtype = function
           let cmp_exp_act = compare (List.length exp_rtype) (List.length te_actuals) in
           if cmp_exp_act = 0 then begin
               let env, use_queue =
-                List.fold_left2
-                  (fun (env, queue) exp te_act ->
+                List.fold_left2 (fun (env, queue) exp te_act ->
                     ignore (multi_texpr_compatible_types exp te_act "return argument");
                     scan_texpr env queue te_act
                   ) (env, use_queue) exp_rtype te_actuals in
@@ -420,26 +397,26 @@ let rec scan_tstmt loc env use_queue exp_rtype = function
 
 and scan_block loc env use_queue rtype block =
   let b_env, b_queue, final =
-    List.fold_left (fun (env, use_queue, _) st -> scan_tstmt loc env use_queue rtype st)
-      (Smap.empty, [], false) block.stmts in
-  Smap.iter
-    (fun id (occ, loc) -> if occ = 0 then
-                            type_error loc (Format.sprintf "%s declared and not used" id)) b_env;
+    List.fold_left (fun (env, use_queue, _) st ->
+        scan_tstmt loc env use_queue rtype st
+      ) (Smap.empty, [], false) block.stmts in
+  Smap.iter (fun id (occ, loc) ->
+      if occ = 0 then type_error loc (Format.sprintf "%s declared and not used" id)
+    ) b_env;
   let env, use_queue = reduce_queue env use_queue b_queue in
   env, use_queue, final
 
 let check_fun_return fun_env =
   let check_one_function name { formals; rtype; body; loc } =
-    let env = List.fold_left (fun env (id, _) -> Smap.add id (0, loc) env) Smap.empty formals in
+    let env =
+      List.fold_left (fun env (id, _) -> Smap.add id (0, loc) env) Smap.empty formals
+    in
     let block = match body with | Typed b -> b | Untyped _ -> assert false in
     let exp_rtype =
       match rtype with
-      | TTunit ->
-         []
-      | TTtuple tl ->
-         tl
-      | _ as t ->
-         [t]
+      | TTunit -> []
+      | TTtuple tl -> tl
+      | _ as t -> [t]
     in
     let env, _, final = scan_block loc env [] exp_rtype block in
     if not final && exp_rtype <> [] then type_error loc "missing return at end of function"
@@ -479,41 +456,25 @@ let prefix n l =
     if n = 0 then List.rev acc
     else
       match l with
-      | [] ->
-         assert false
-      | x :: l ->
-         loop (n-1) (x :: acc) l
+      | [] -> assert false
+      | x :: l -> loop (n-1) (x :: acc) l
   in
   loop n [] l
 
 let inv_ubranch = function
-  | Rtltree.Mjz ->
-     Rtltree.Mjnz
-  | Rtltree.Mjnz ->
-     Rtltree.Mjz
-  | Rtltree.Mjei n ->
-     Rtltree.Mjnei n
-  | Rtltree.Mjnei n ->
-     Rtltree.Mjei n
-  | Rtltree.Mjgi n ->
-     Rtltree.Mjlei n
-  | Rtltree.Mjgei n ->
-     Rtltree.Mjli n
-  | Rtltree.Mjli n ->
-     Rtltree.Mjgei n
-  | Rtltree.Mjlei n ->
-     Rtltree.Mjgi n
+  | Rtltree.Mjz -> Rtltree.Mjnz
+  | Rtltree.Mjnz -> Rtltree.Mjz
+  | Rtltree.Mjei n -> Rtltree.Mjnei n
+  | Rtltree.Mjnei n -> Rtltree.Mjei n
+  | Rtltree.Mjgi n -> Rtltree.Mjlei n
+  | Rtltree.Mjgei n -> Rtltree.Mjli n
+  | Rtltree.Mjli n -> Rtltree.Mjgei n
+  | Rtltree.Mjlei n -> Rtltree.Mjgi n
 
 let inv_bbranch = function
-  | Rtltree.Mje ->
-     Rtltree.Mjne
-  | Rtltree.Mjne ->
-     Rtltree.Mje
-  | Rtltree.Mjg ->
-     Rtltree.Mjle
-  | Rtltree.Mjge ->
-     Rtltree.Mjl
-  | Rtltree.Mjl ->
-     Rtltree.Mjge
-  | Rtltree.Mjle ->
-     Rtltree.Mjg
+  | Rtltree.Mje -> Rtltree.Mjne
+  | Rtltree.Mjne -> Rtltree.Mje
+  | Rtltree.Mjg -> Rtltree.Mjle
+  | Rtltree.Mjge -> Rtltree.Mjl
+  | Rtltree.Mjl -> Rtltree.Mjge
+  | Rtltree.Mjle -> Rtltree.Mjg

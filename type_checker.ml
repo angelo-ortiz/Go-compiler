@@ -25,8 +25,9 @@ let type_of_string loc = function
   | "bool" ->
      TTbool
   | _ as str ->
-     try let _ = Smap.find str !struct_env in
-         TTstruct str
+     try
+       let _ = Smap.find str !struct_env in
+       TTstruct str
      with Not_found ->
        Utils.type_error loc (Format.asprintf "undefined: %s" str)
 
@@ -38,13 +39,12 @@ let rec type_of_expr e =
      let typ = type_of_expr e_t in
      TTpointer typ
   | _ ->
-     Utils.type_error e.loc (Format.asprintf "%a is not a type" Utils.string_of_expr e.desc)
+     Utils.type_error e.loc
+       (Format.asprintf "%a is not a type" Utils.string_of_expr e.desc)
     
 let rec type_of_ast_typ = function
-  | Ast.Tbasic (str, loc) ->
-     type_of_string loc str
-  | Ast.Tpointer typ ->
-     TTpointer (type_of_ast_typ typ)
+  | Ast.Tbasic (str, loc) -> type_of_string loc str
+  | Ast.Tpointer typ -> TTpointer (type_of_ast_typ typ)
 
 let type_of_unop exp op t_exp =
   match op, t_exp.typ with
@@ -70,17 +70,15 @@ let type_of_unop exp op t_exp =
           Utils.string_of_unop op Utils.string_of_type t_exp.typ)
 
 let type_of_binop = function
-  | Ast.Badd | Ast.Bsub | Ast.Bmul | Ast.Bdiv | Ast.Bmod ->
-     TTint
-  | Ast.Beq | Ast.Bneq | Ast.Blt | Ast.Ble | Ast.Bgt | Ast.Bge | Ast.Band | Ast.Bor ->
-     TTbool
+  | Ast.Badd | Ast.Bsub | Ast.Bmul | Ast.Bdiv | Ast.Bmod -> TTint
+  | Ast.Beq | Ast.Bneq | Ast.Blt | Ast.Ble | Ast.Bgt
+  | Ast.Bge | Ast.Band | Ast.Bor -> TTbool
 
 let tdesc_of_select t_str fd =
   match t_str.typ, t_str.tdesc with
   | TTpointer (TTstruct _), _ ->
      TEselect_dref (t_str, fd)
-  | TTstruct _, TEunop (Ast.Udref, t_str) ->
-     (* I'd rather use C's "->" than C's "." *)
+  | TTstruct _, TEunop (Ast.Udref, t_str) -> (* prefer C's "->" over C's "." *)
      TEselect_dref (t_str, fd)
   | TTstruct _, _ ->
      TEselect (t_str, fd)
@@ -240,8 +238,7 @@ and type_fun_params env f loc formals actuals =
                            Utils.string_of_type t_a Utils.string_of_type t_f f)
            ) ty_formals ty_actuals;
          match ty_actuals with
-         | [t_act] when t_act = TTnil ->
-            (* TTnil's "unification" *)
+         | [t_act] when t_act = TTnil -> (* "unification" of TTnil *)
             [{ te_act with typ = List.hd ty_formals }]
          | _ ->
             [te_act]
@@ -253,8 +250,7 @@ and type_fun_params env f loc formals actuals =
   | _  ->
      let cmp_act_form = compare (List.length actuals) (List.length ty_formals) in
      if cmp_act_form = 0 then begin
-         List.map2
-           (fun ty_form act -> 
+         List.map2 (fun ty_form act -> 
              let t_act = type_expr env act in
              Utils.multi_texpr_compatible_types ty_form t_act
                (Format.sprintf "argument to %s" f)
@@ -300,8 +296,7 @@ let type_assigned_values env loc to_be_assigned values =
              Utils.single_texpr_compatible_types te_ass.typ t_v te_value.loc f_msg
            ) to_be_assigned t_values;
          match t_values with
-         | [t_val] when t_val = TTnil ->
-            (* TTnil's "unification" *)
+         | [t_val] when t_val = TTnil -> (* "unification" of TTnil *)
             [{ te_value with typ = (List.hd to_be_assigned).typ }]
          | _ ->
             [te_value]
@@ -325,10 +320,8 @@ let type_assigned_values env loc to_be_assigned values =
 let type_underscores to_be_assigned t_values =
   let t_types =
     match t_values with
-    | [{ tdesc; typ = TTtuple tl; is_assignable; loc }] ->
-       tl
-    | _ as vs ->
-       List.map (fun t_v -> t_v.typ) vs
+    | [{ tdesc; typ = TTtuple tl; is_assignable; loc }] -> tl
+    | _ as vs -> List.map (fun t_v -> t_v.typ) vs
   in
   List.map2 (fun t_e t ->
       match t_e.tdesc with
@@ -340,10 +333,11 @@ let type_underscores to_be_assigned t_values =
      
 let update_env env var_map = function
   | TSdeclare (var_list, values) ->
-     List.fold_left
-       (fun env var -> if var.id = "_" then env
-                       else try Smap.add var.id (Smap.find var.id var_map) env
-                            with Not_found -> assert false
+     List.fold_left (fun env var ->
+         if var.id = "_" then env
+         else
+           try Smap.add var.id (Smap.find var.id var_map) env
+           with Not_found -> assert false
        ) env var_list
   | _ ->
      env
@@ -364,8 +358,7 @@ let rec type_shstmt env b_vars b_number = function
           in
           b_vars, TScall (f, actuals)
        | Eprint el ->
-          if not !import_fmt then
-            Utils.type_error e.loc "undefined: fmt";
+          if not !import_fmt then Utils.type_error e.loc "undefined: fmt";
           used_fmt := true;
           b_vars, TSprint (type_expr_list env el)
      end
@@ -378,27 +371,24 @@ let rec type_shstmt env b_vars b_number = function
        if t_e.typ = TTint
        then b_vars,
             match i_d with
-            | Iincr _ ->
-               TSincr t_e
-            | Idecr _ ->
-               TSdecr t_e
-            | _ ->
-               assert false
+            | Iincr _ -> TSincr t_e
+            | Idecr _ -> TSdecr t_e
+            | _ -> assert false
        else Utils.type_error e.loc
               (Format.asprintf "invalid operation %a%s (non-numeric type %a)"
                  Utils.string_of_expr e.desc string_of_op Utils.string_of_type t_e.typ)
      else Utils.type_error e.loc
             (Format.asprintf "cannot assign to %a" Utils.string_of_expr e.desc)
   | Ast.Iassign (assigned_s, values) ->
-     let t_assigned_s = List.map
-                          (fun ass -> if ass.Ast.desc = Ast.Eident "_" then under_texpr
-                                      else
-                                        let t_ass = type_expr env ass in
-                                        if not t_ass.is_assignable then
-                                          Utils.type_error ass.loc
-                                            (Format.asprintf "cannot assign to %a"
-                                               Utils.string_of_expr ass.desc);
-                                        t_ass
+     let t_assigned_s = List.map (fun ass ->
+                            if ass.Ast.desc = Ast.Eident "_" then under_texpr
+                            else
+                              let t_ass = type_expr env ass in
+                              if not t_ass.is_assignable then
+                                Utils.type_error ass.loc
+                                  (Format.asprintf "cannot assign to %a"
+                                     Utils.string_of_expr ass.desc);
+                              t_ass
                           ) assigned_s in
      let loc = try (List.hd values).loc with Failure _ -> assert false in
      let t_values = type_assigned_values env loc t_assigned_s values in
@@ -412,15 +402,11 @@ let rec type_shstmt env b_vars b_number = function
      let t_values = type_assigned_values env loc untyped_vars values in
      let types =
        match t_values with
-       | [{ tdesc; typ = TTtuple types; is_assignable; loc }] ->
-          types
+       | [] -> assert false
+       | [{ tdesc; typ = TTtuple types; is_assignable; loc }] -> types
        | [{ tdesc; typ = (TTint|TTstring|TTbool|TTstruct _|TTpointer _ as t);
-            is_assignable; loc }] ->
-          [t]
-       | [] ->
-          assert false
-       | _ as types ->
-          List.map (fun t_e -> t_e.typ) types
+            is_assignable; loc }] -> [t]
+       | _ as types -> List.map (fun t_e -> t_e.typ) types
      in
      let rec update_var_map (var_map:Asg.tvar Asg.Smap.t) t_vars = function
        | [], [] ->
@@ -476,7 +462,8 @@ let rec type_stmt env b_vars b_number = function
        | [] -> (* declaration *)
           (* syntax error if unspecified *)
           let typ =
-            match ty with | Some t -> type_of_ast_typ t | None -> assert false in
+            match ty with | Some t -> type_of_ast_typ t | None -> assert false
+          in
           let rec update_var_map (var_map:Asg.tvar Asg.Smap.t) t_vars = function
             | [] ->
                var_map, List.rev t_vars
@@ -501,22 +488,19 @@ let rec type_stmt env b_vars b_number = function
           b_vars, TSdeclare (t_assigned_s, [])
        | _ -> (* declare-and-assign *)
           let typ =
-            match ty with | Some t -> Some (type_of_ast_typ t) | None -> None in
+            match ty with | Some t -> Some (type_of_ast_typ t) | None -> None
+          in
           let vars_ph =
             match typ with
-            | Some typ ->
-               List.map (expr_placeholder ~typ) vars
-            | None ->
-               List.map expr_placeholder vars
+            | Some typ -> List.map (expr_placeholder ~typ) vars
+            | None -> List.map expr_placeholder vars
           in
           let loc = (List.hd values).loc in
           let t_values = type_assigned_values env loc vars_ph values in
           let types =
             match t_values with
-            | [{ tdesc; typ = TTtuple types; is_assignable; loc }] ->
-               types
-            | _ as types ->
-               List.map (fun t_e -> t_e.typ) types
+            | [{ tdesc; typ = TTtuple types; is_assignable; loc }] -> types
+            | _ as types -> List.map (fun t_e -> t_e.typ) types
           in
           let rec update_var_map (var_map:Asg.tvar Asg.Smap.t) t_vars = function
             | [], [] ->
@@ -567,10 +551,8 @@ let rec type_stmt env b_vars b_number = function
        let for_number = next_bnumber () in
        let for_vars, for_stmts =
          match post with
-         | None ->
-            type_block env body for_number
-         | Some st ->
-            type_block env body ~ending_stmt:(Ast.Sexec st) for_number
+         | None -> type_block env body for_number
+         | Some st -> type_block env body ~ending_stmt:(Ast.Sexec st) for_number
        in
        let for_block =
          TSfor (t_cond, { vars = for_vars; stmts = for_stmts; number = for_number })
@@ -608,8 +590,7 @@ let rec type_vars_of_decl (vars, typ) typ_list msg =
 
 let type_vars_list msg vars =
   List.rev (
-      List.fold_left
-        (fun typ_list (vars, typ) ->
+      List.fold_left (fun typ_list (vars, typ) ->
           let typ = type_of_ast_typ typ in
           type_vars_of_decl (vars, typ) typ_list msg
         ) [] vars
@@ -649,12 +630,9 @@ let type_fun_sign (name, loc, args, rtype, body) =
     (* check return type *)
     let rtype =
       match List.map type_of_ast_typ rtype with
-      | [] ->
-         TTunit
-      | [t] ->
-         t
-      | _ as ts ->
-         TTtuple ts
+      | [] -> TTunit
+      | [t] -> t
+      | _ as ts -> TTtuple ts
     in
     func_env := Smap.add name { formals; rtype; body = Untyped body; loc } !func_env
 

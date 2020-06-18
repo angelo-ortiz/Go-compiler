@@ -37,10 +37,8 @@ let length_of_struct =
 let length_of_type = _length_of_type length_of_struct
 
 let struct_of_texpr = function
-  | Asg.TTstruct str | Asg.TTpointer (Asg.TTstruct str) ->
-     str
-  | _ ->
-     assert false
+  | Asg.TTstruct str | Asg.TTpointer (Asg.TTstruct str) -> str
+  | _ -> assert false
     
 let field_offset str fd =
   let str = Asg.Smap.find str !struct_env in
@@ -56,7 +54,7 @@ let field_offset str fd =
 let prepend_bnumber tvar =
   Format.sprintf "%d_%s" tvar.b_number tvar.id
 
-let expr_of_primitive e int_not_bool =
+let expr_of_prim e int_not_bool =
   { length = 1; desc = e; typ = if int_not_bool then TTint else TTbool }
 
 let default_value typ =
@@ -81,10 +79,8 @@ let default_value typ =
        assert false
   in
   match loop ([], 0) typ with
-  | [e], _ ->
-     e
-  | _ as l, length ->
-     { length; desc = IElist (List.rev l); typ }
+  | [e], _ -> e
+  | _ as l, length -> { length; desc = IElist (List.rev l); typ }
     
 let rec mk_add e1 e2 =
   match e1.desc, e2.desc with
@@ -93,7 +89,7 @@ let rec mk_add e1 e2 =
   | e, IEint 0L | IEint 0L, e ->
      e
   | IEunop (Maddi n1, e), IEint n2 | IEint n2, IEunop (Maddi n1, e) ->
-     mk_add (expr_of_primitive (IEint (Int64.add n1 n2)) true) e
+     mk_add (expr_of_prim (IEint (Int64.add n1 n2)) true) e
   | _, IEint n ->
      IEunop (Maddi n, e1)
   | IEint n, _ ->
@@ -106,7 +102,7 @@ let rec mk_neg e =
   | IEint n ->
      IEint (Int64.neg n)
   | IEunop (Maddi n, e) ->
-     IEunop (Maddi (Int64.neg n), expr_of_primitive (mk_neg e) true)
+     IEunop (Maddi (Int64.neg n), expr_of_prim (mk_neg e) true)
   | _ ->
      IEunop (Mneg, e)
     
@@ -119,13 +115,13 @@ and mk_sub e1 e2 =
   | IEint 0L, _ ->
      mk_neg e2
   | IEunop (Maddi n1, e), IEint n2 ->
-     mk_sub e (expr_of_primitive (IEint (Int64.sub n2 n1)) true)
+     mk_sub e (expr_of_prim (IEint (Int64.sub n2 n1)) true)
   | IEint n2, IEunop (Maddi n1, e) ->
-     mk_sub (expr_of_primitive (IEint (Int64.sub n2 n1)) true) e
+     mk_sub (expr_of_prim (IEint (Int64.sub n2 n1)) true) e
   | _, IEint n ->
      IEunop (Maddi (Int64.neg n), e1)
   | IEint n, _ ->
-     IEunop (Maddi n, expr_of_primitive (mk_neg e2) true)
+     IEunop (Maddi n, expr_of_prim (mk_neg e2) true)
   | _ ->
      IEbinop (Msub, e1, e2)
 
@@ -134,7 +130,7 @@ let rec mk_mul e1 e2 =
   | IEint n1, IEint n2 ->
      IEint (Int64.mul n1 n2)
   | IEunop (Mimuli n1, e), IEint n2 | IEint n2, IEunop (Mimuli n1, e) ->
-     mk_mul (expr_of_primitive (IEint (Int64.mul n1 n2)) true) e
+     mk_mul (expr_of_prim (IEint (Int64.mul n1 n2)) true) e
   | e, IEint 1L | IEint 1L, e ->
      e
   | _, IEint -1L ->
@@ -157,7 +153,7 @@ let rec mk_div e1 e2 =
   | e, IEint 1L ->
      e
   | IEunop (Midivil n1, e), IEint n2 ->
-     mk_div e (expr_of_primitive (IEint (Int64.mul n1 n2)) true)
+     mk_div e (expr_of_prim (IEint (Int64.mul n1 n2)) true)
   | _, IEint n ->
      IEunop (Midivil n, e1)
   | IEint n, _ ->
@@ -180,81 +176,48 @@ let rec mk_mod e1 e2 =
 
 let rec mk_not e =
   match e.desc with
-  | IEbool b ->
-     IEbool (not b)
-  | IEunop (Msetei n, e) ->
-     IEunop (Msetnei n, e)
-  | IEunop (Msetnei n, e) ->
-     IEunop (Msetei n, e)
-  | IEunop (Msetli n, e) ->
-     IEunop (Msetgei n, e)
-  | IEunop (Msetlei n, e) ->
-     IEunop (Msetgi n, e)
-  | IEunop (Msetgi n, e) ->
-     IEunop (Msetlei n, e)
-  | IEunop (Msetgei n, e) ->
-     IEunop (Msetli n, e)
-  | IEbinop (Msete, l, r) ->
-     IEbinop (Msetne, l, r)
-  | IEbinop (Msetne, l, r) ->
-     IEbinop (Msete, l, r)
-  | IEbinop (Msetl, l, r) ->
-     IEbinop (Msetge, l, r)
-  | IEbinop (Msetle, l, r) ->
-     IEbinop (Msetg, l, r)
-  | IEbinop (Msetg, l, r) ->
-     IEbinop (Msetle, l, r)
-  | IEbinop (Msetge, l, r) ->
-     IEbinop (Msetl, l, r) 
-  | IEand (l, r) ->
-     IEor (expr_of_primitive (mk_not l) false, expr_of_primitive (mk_not r) false)
-  | IEor (l, r) ->
-     IEand (expr_of_primitive (mk_not l) false, expr_of_primitive (mk_not r) false)
-  | _ ->
-     IEunop (Mnot, e)
+  | IEbool b -> IEbool (not b)
+  | IEunop (Msetei n, e) -> IEunop (Msetnei n, e)
+  | IEunop (Msetnei n, e) -> IEunop (Msetei n, e)
+  | IEunop (Msetli n, e) -> IEunop (Msetgei n, e)
+  | IEunop (Msetlei n, e) -> IEunop (Msetgi n, e)
+  | IEunop (Msetgi n, e) -> IEunop (Msetlei n, e)
+  | IEunop (Msetgei n, e) -> IEunop (Msetli n, e)
+  | IEbinop (Msete, l, r) -> IEbinop (Msetne, l, r)
+  | IEbinop (Msetne, l, r) -> IEbinop (Msete, l, r)
+  | IEbinop (Msetl, l, r) -> IEbinop (Msetge, l, r)
+  | IEbinop (Msetle, l, r) -> IEbinop (Msetg, l, r)
+  | IEbinop (Msetg, l, r) -> IEbinop (Msetle, l, r)
+  | IEbinop (Msetge, l, r) -> IEbinop (Msetl, l, r) 
+  | IEand (l, r) -> IEor (expr_of_prim (mk_not l) false, expr_of_prim (mk_not r) false)
+  | IEor (l, r) -> IEand (expr_of_prim (mk_not l) false, expr_of_prim (mk_not r) false)
+  | _ -> IEunop (Mnot, e)
 
 let mk_eq e1 e2 =
   match e1.desc, e2.desc with
-  | IEbool b1, IEbool b2 ->
-     IEbool (b1 = b2)
-  | IEint n1, IEint n2 ->
-     IEbool (n1 = n2)
-  | IEstring s1, IEstring s2 ->
-     IEbool (s1 = s2)
-  | IEaccess v1, IEaccess v2 when v1 = v2 ->
-     IEbool true
-  | _, IEint n ->
-     IEunop (Msetei n, e1)
-  | IEint n, _ ->
-     IEunop (Msetei n, e2)
-  | _ ->
-     IEbinop (Msete, e1, e2)
+  | IEbool b1, IEbool b2 -> IEbool (b1 = b2)
+  | IEint n1, IEint n2 -> IEbool (n1 = n2)
+  | IEstring s1, IEstring s2 -> IEbool (s1 = s2)
+  | IEaccess v1, IEaccess v2 when v1 = v2 -> IEbool true
+  | _, IEint n -> IEunop (Msetei n, e1)
+  | IEint n, _ -> IEunop (Msetei n, e2)
+  | _ -> IEbinop (Msete, e1, e2)
     
 let mk_lt e1 e2 =
   match e1.desc, e2.desc with
-  | IEint n1, IEint n2 ->
-     IEbool (n1 < n2)
-  | IEaccess v1, IEaccess v2 when v1 = v2 ->
-     IEbool false
-  | _, IEint n ->
-     IEunop (Msetli n, e1)
-  | IEint n, _ ->
-     IEunop (Msetgi n, e2)
-  | _ ->
-     IEbinop (Msetl, e1, e2)
+  | IEint n1, IEint n2 -> IEbool (n1 < n2)
+  | IEaccess v1, IEaccess v2 when v1 = v2 -> IEbool false
+  | _, IEint n -> IEunop (Msetli n, e1)
+  | IEint n, _ -> IEunop (Msetgi n, e2)
+  | _ -> IEbinop (Msetl, e1, e2)
     
 let mk_le e1 e2 =
   match e1.desc, e2.desc with
-  | IEint n1, IEint n2 ->
-     IEbool (n1 <= n2)
-  | IEaccess v1, IEaccess v2 when v1 = v2 ->
-     IEbool true
-  | _, IEint n ->
-     IEunop (Msetlei n, e1)
-  | IEint n, _ ->
-     IEunop (Msetgei n, e2)
-  | _ ->
-     IEbinop (Msetle, e1, e2)
+  | IEint n1, IEint n2 -> IEbool (n1 <= n2)
+  | IEaccess v1, IEaccess v2 when v1 = v2 -> IEbool true
+  | _, IEint n -> IEunop (Msetlei n, e1)
+  | IEint n, _ -> IEunop (Msetgei n, e2)
+  | _ -> IEbinop (Msetle, e1, e2)
 
 let rec expr e =
   let length, desc, typ = expr_desc e in
@@ -312,15 +275,15 @@ and expr_desc e =
   | TEbinop (Ast.Beq, l, r) ->
      length_of_type e.typ, mk_eq (expr l) (expr r), e.typ
   | TEbinop (Ast.Bneq, l, r) ->
-     length_of_type e.typ, mk_not (expr_of_primitive (mk_eq (expr l) (expr r)) false), e.typ
+     length_of_type e.typ, mk_not (expr_of_prim (mk_eq (expr l) (expr r)) false), e.typ
   | TEbinop (Ast.Blt, l, r) ->
      length_of_type e.typ, mk_lt (expr l) (expr r), e.typ
   | TEbinop (Ast.Ble, l, r) ->
      length_of_type e.typ, mk_le (expr l) (expr r), e.typ
   | TEbinop (Ast.Bgt, l, r) ->
-     length_of_type e.typ, mk_not (expr_of_primitive (mk_le (expr l) (expr r)) false), e.typ
+     length_of_type e.typ, mk_not (expr_of_prim (mk_le (expr l) (expr r)) false), e.typ
   | TEbinop (Ast.Bge, l, r) ->
-     length_of_type e.typ, mk_not (expr_of_primitive (mk_lt (expr l) (expr r)) false), e.typ
+     length_of_type e.typ, mk_not (expr_of_prim (mk_lt (expr l) (expr r)) false), e.typ
   | TEbinop (Ast.Band, l, r) ->
      length_of_type e.typ, IEand (expr l, expr r), e.typ
   | TEbinop (Ast.Bor, l, r) ->
@@ -332,10 +295,8 @@ let assign_desc = function
   | IEselect (str, fd) ->
      begin
        match str.desc with
-       | IEaccess v ->
-          Afield_var (v, fd)
-       | _ ->
-          Afield (str, fd)
+       | IEaccess v -> Afield_var (v, fd)
+       | _ -> Afield (str, fd)
      end
   | IEload (str, n) ->
      Adref (str, n)
@@ -353,15 +314,14 @@ let rec stmt locals body = function
      locals, body
   | TScall (f, actuals) ->
      locals, IScall (f, List.map expr actuals) :: body
-  | TSprint es when es = [] ->
-     (* no expressions to print *)
+  | TSprint es when es = [] -> (* no expressions to print *)
      locals, body
   | TSprint es ->
      locals, ISprint (List.map expr es) :: body
   | TSincr e ->
-     locals, ISexpr (expr_of_primitive (IEunop (Minc, expr e)) true) :: body
+     locals, ISexpr (expr_of_prim (IEunop (Minc, expr e)) true) :: body
   | TSdecr e ->
-     locals, ISexpr (expr_of_primitive (IEunop (Mdec, expr e)) true) :: body
+     locals, ISexpr (expr_of_prim (IEunop (Mdec, expr e)) true) :: body
   | TSblock b ->
      block locals body b
   | TSif (cond, bif, belse) ->
@@ -394,10 +354,8 @@ let rec stmt locals body = function
                                               | val_ :: vals ->
                                                  rem_values := vals;
                                                  begin match val_.tdesc with
-                                                 | TEnew ty ->
-                                                    (id', ty) :: !to_default
-                                                 | _ ->
-                                                    !to_default
+                                                 | TEnew ty -> (id', ty) :: !to_default
+                                                 | _ -> !to_default
                                                  end;
                                               | [] ->
                                                  !to_default
@@ -445,7 +403,8 @@ let funct (f:Asg.tfundef) =
   in
   (* local vars at block 0 cannot have the same name as a formal parameter *)
   let formals = List.map (fun (id, ty) -> "0_" ^ id, length_of_type ty) f.formals in
-  let locals, body = block [] [] (match f.body with | Typed b -> b | Untyped _ -> assert false) in
+  let locals, body = block [] [] (match f.body with | Typed b -> b | Untyped _ -> assert false)
+  in
   { formals; result = result_length f.rtype; locals = List.rev locals; body = List.rev body }
   
 let programme (p:Asg.tprogramme) =

@@ -1,6 +1,4 @@
 
-open Register
-open Rtltree
 open Ertltree
 
 let graph = ref Label.M.empty
@@ -14,68 +12,41 @@ let generate a =
 
 let assoc_arguments args =
   let rec assoc (reg, stack) = function
-    | [], _ ->
-       List.rev reg, List.rev stack
-    | ra :: args, [] ->
-       assoc (reg, ra :: stack) (args, [])
-    | ra :: args, rp :: params ->
-       assoc ((ra, rp) :: reg, stack) (args, params) 
+    | [], _ -> List.rev reg, List.rev stack
+    | ra :: args, [] -> assoc (reg, ra :: stack) (args, [])
+    | ra :: args, rp :: params -> assoc ((ra, rp) :: reg, stack) (args, params)
   in
   assoc ([], []) (args, Register.parameters)
 
 let translate_munop = function
-  | Istree.Mnot ->
-     Mnot
-  | Istree.Mneg ->
-     Mneg
-  | Istree.Maddi n ->
-     Maddi n
-  | Istree.Mimuli n ->
-     Mimuli n
-  | Istree.Minc ->
-     Minc
-  | Istree.Mdec ->
-     Mdec
-  | Istree.Midivil _  | Istree.Midivir _ | Istree.Mmodil _ | Istree.Mmodir _ ->
-     assert false
-  | Istree.Msetei n ->
-     Msetei n
-  | Istree.Msetnei n ->
-     Msetnei n
-  | Istree.Msetgi n ->
-     Msetgi n
-  | Istree.Msetgei n ->
-     Msetgei n
-  | Istree.Msetli n ->
-     Msetli n
-  | Istree.Msetlei n ->
-     Msetlei n
+  | Istree.Mnot -> Mnot
+  | Istree.Mneg -> Mneg
+  | Istree.Maddi n -> Maddi n
+  | Istree.Mimuli n -> Mimuli n
+  | Istree.Minc -> Minc
+  | Istree.Mdec -> Mdec
+  | Istree.Midivil _  | Istree.Midivir _
+  | Istree.Mmodil _ | Istree.Mmodir _ -> assert false
+  | Istree.Msetei n -> Msetei n
+  | Istree.Msetnei n -> Msetnei n
+  | Istree.Msetgi n -> Msetgi n
+  | Istree.Msetgei n -> Msetgei n
+  | Istree.Msetli n -> Msetli n
+  | Istree.Msetlei n -> Msetlei n
 
 let translate_binop = function
-  | Istree.Madd ->
-     Madd
-  | Istree.Msub ->
-     Msub
-  | Istree.Mimul ->
-     Mimul
-  | Istree.Midiv | Istree.Mmod ->
-     assert false
-  | Istree.Mxor ->
-     Mxor
-  | Istree.Msete ->
-     Msete
-  | Istree.Msetne ->
-     Msetne
-  | Istree.Msetg ->
-     Msetg
-  | Istree.Msetge ->
-     Msetge
-  | Istree.Msetl ->
-     Msetl
-  | Istree.Msetle ->
-     Msetle
-  | Istree.Mmov ->
-     Mmov
+  | Istree.Madd -> Madd
+  | Istree.Msub -> Msub
+  | Istree.Mimul -> Mimul
+  | Istree.Midiv | Istree.Mmod -> assert false
+  | Istree.Mxor -> Mxor
+  | Istree.Msete -> Msete
+  | Istree.Msetne -> Msetne
+  | Istree.Msetg -> Msetg
+  | Istree.Msetge -> Msetge
+  | Istree.Msetl -> Msetl
+  | Istree.Msetle -> Msetle
+  | Istree.Mmov -> Mmov
 
 let move src dst l =
   generate (Imbinop (Mmov, src, dst, l))
@@ -96,12 +67,9 @@ let set_result r ofs l =
  *** if only one 8 B result, then in %rax
  *** otherwise, all the results on the stack and the first one is at the lowest address *)
 let move_return_call l = function
-  | [] ->
-     l
-  | [r] ->
-     move Register.rax r l
-  | retrs ->
-     List.fold_right pop_param retrs l
+  | [] -> l
+  | [r] -> move Register.rax r l
+  | retrs -> List.fold_right pop_param retrs l
 
 let move_return_def l = function
   | [] ->
@@ -238,5 +206,5 @@ let funct fname (f:Rtltree.rfundef) =
   heap_locals := [];
   { formals = List.length f.formals; locals = f.locals; stored_locals; entry; body }
     
-let programme p =
+let programme (p:Rtltree.rprogramme) =
   Asg.Smap.mapi funct p.functions

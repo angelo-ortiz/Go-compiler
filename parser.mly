@@ -2,9 +2,8 @@
  /* Go parser */
 
 %{
-	open Ast
-	open Utils
-	
+    open Ast
+    open Utils	
 %}
 
 %token <Ast.binop> CMP
@@ -145,8 +144,6 @@ assign:
 shstmt:
   | e = expr
 	{ Ieval e }
-  /* | print values = separated_list(COMMA, expr) RPAR */
-  /* 	{ Iprint values } */
   | e = expr INCR
 	{ Iincr e }
   | e = expr DECR
@@ -190,11 +187,19 @@ expr:
 ;
 
 %inline binop:
-  | PLUS    { Badd }
-  | MINUS   { Bsub }
-  | STAR    { Bmul }
-  | DIV     { Bdiv }
-  | MOD     { Bmod }
-  | AND     { Band }
-  | OR      { Bor }
-  | c = CMP { c }
+  | PLUS
+        { Badd }
+  | MINUS
+        { Bsub }
+  | STAR
+        { Bmul }
+  | DIV
+        { Bdiv }
+  | MOD
+        { Bmod }
+  | AND
+        { Band }
+  | OR
+        { Bor }
+  | c = CMP
+        { c }
