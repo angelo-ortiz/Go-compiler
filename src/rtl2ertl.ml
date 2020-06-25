@@ -1,5 +1,5 @@
 
-open Ertltree
+open Ertl
 
 let graph = ref Label.M.empty
 let heap_locals_set = ref Register.S.empty
@@ -19,34 +19,34 @@ let assoc_arguments args =
   assoc ([], []) (args, Register.parameters)
 
 let translate_munop = function
-  | Istree.Mnot -> Mnot
-  | Istree.Mneg -> Mneg
-  | Istree.Maddi n -> Maddi n
-  | Istree.Mimuli n -> Mimuli n
-  | Istree.Minc -> Minc
-  | Istree.Mdec -> Mdec
-  | Istree.Midivil _  | Istree.Midivir _
-  | Istree.Mmodil _ | Istree.Mmodir _ -> assert false
-  | Istree.Msetei n -> Msetei n
-  | Istree.Msetnei n -> Msetnei n
-  | Istree.Msetgi n -> Msetgi n
-  | Istree.Msetgei n -> Msetgei n
-  | Istree.Msetli n -> Msetli n
-  | Istree.Msetlei n -> Msetlei n
+  | Isl.Mnot -> Mnot
+  | Isl.Mneg -> Mneg
+  | Isl.Maddi n -> Maddi n
+  | Isl.Mimuli n -> Mimuli n
+  | Isl.Minc -> Minc
+  | Isl.Mdec -> Mdec
+  | Isl.Midivil _  | Isl.Midivir _
+  | Isl.Mmodil _ | Isl.Mmodir _ -> assert false
+  | Isl.Msetei n -> Msetei n
+  | Isl.Msetnei n -> Msetnei n
+  | Isl.Msetgi n -> Msetgi n
+  | Isl.Msetgei n -> Msetgei n
+  | Isl.Msetli n -> Msetli n
+  | Isl.Msetlei n -> Msetlei n
 
 let translate_binop = function
-  | Istree.Madd -> Madd
-  | Istree.Msub -> Msub
-  | Istree.Mimul -> Mimul
-  | Istree.Midiv | Istree.Mmod -> assert false
-  | Istree.Mxor -> Mxor
-  | Istree.Msete -> Msete
-  | Istree.Msetne -> Msetne
-  | Istree.Msetg -> Msetg
-  | Istree.Msetge -> Msetge
-  | Istree.Msetl -> Msetl
-  | Istree.Msetle -> Msetle
-  | Istree.Mmov -> Mmov
+  | Isl.Madd -> Madd
+  | Isl.Msub -> Msub
+  | Isl.Mimul -> Mimul
+  | Isl.Midiv | Isl.Mmod -> assert false
+  | Isl.Mxor -> Mxor
+  | Isl.Msete -> Msete
+  | Isl.Msetne -> Msetne
+  | Isl.Msetg -> Msetg
+  | Isl.Msetge -> Msetge
+  | Isl.Msetl -> Msetl
+  | Isl.Msetle -> Msetle
+  | Isl.Mmov -> Mmov
 
 let move src dst l =
   generate (Imbinop (Mmov, src, dst, l))
@@ -83,17 +83,17 @@ let move_return_def l = function
             ) (l, ofs) retrs)
 
 let instr = function
-  | Rtltree.Iint (n, r, l) ->
+  | Rtl.Iint (n, r, l) ->
      Iint (n, r, l)
-  | Rtltree.Istring (s, r, l) ->
+  | Rtl.Istring (s, r, l) ->
      Istring (s, r, l)
-  | Rtltree.Ibool (b, r, l) ->
+  | Rtl.Ibool (b, r, l) ->
      Ibool (b, r, l)
-  | Rtltree.Imalloc (r, n, l) ->
+  | Rtl.Imalloc (r, n, l) ->
      Iint (Int64.of_int32 n, Register.rdi, generate (
      Icall ("malloc", 1, generate (
      Imbinop (Mmov, Register.rax, r, l)))))
-  | Rtltree.Ilea_local (rxs, ofs, dst, l) ->
+  | Rtl.Ilea_local (rxs, ofs, dst, l) ->
      (* registers rxs belong to f.locals *)
      let fst_rx = List.hd rxs in
      if not (Register.S.mem fst_rx !heap_locals_set) then begin
@@ -103,13 +103,13 @@ let instr = function
                              ) !heap_locals_set rxs
        end;
      Ilea_local (fst_rx, ofs, dst, l)
-  | Rtltree.Ilea (src, ofs, dst, l) -> 
+  | Rtl.Ilea (src, ofs, dst, l) -> 
      Ilea (src, ofs, dst, l)
-  | Rtltree.Iload (src, ofs, dst, l) ->
+  | Rtl.Iload (src, ofs, dst, l) ->
      Iload (src, ofs, dst, l)
-  | Rtltree.Istore (src, dst, ofs, l) ->
+  | Rtl.Istore (src, dst, ofs, l) ->
      Istore (src, dst, ofs, l)
-  | Rtltree.Icall (res, f, actuals, l) ->
+  | Rtl.Icall (res, f, actuals, l) ->
      let size_res = Utils.word_size * List.length res in
      let act_param, stack = assoc_arguments actuals in
      let n = List.length act_param in
@@ -127,7 +127,7 @@ let instr = function
      let l = List.fold_right (fun r l -> push_param r l) stack l in
      let l = List.fold_right (fun (a, r) l -> move a r l) act_param l in
      Igoto l
-  | Rtltree.Iprint (regs, l) ->
+  | Rtl.Iprint (regs, l) ->
      let arg_param, stack = assoc_arguments regs in
      let n = List.length arg_param in
      let l = generate (Icall ("printf", n, l)) in
@@ -135,41 +135,41 @@ let instr = function
      let l = List.fold_right (fun r l -> push_param r l) stack l in
      let l = List.fold_right (fun (a, r) l -> move a r l) arg_param l in
      Igoto l
-  | Rtltree.Imunop (Midivil n, r, l) ->
+  | Rtl.Imunop (Midivil n, r, l) ->
      Imbinop   (Mmov, r, Register.rax, generate (
      Iidiv_imm (n, generate (
      Imbinop   (Mmov, Register.rax, r, l)))))
-  | Rtltree.Imunop (Midivir n, r, l) ->
+  | Rtl.Imunop (Midivir n, r, l) ->
      Iint      (n, Register.rax, generate (
      Iidiv     (r, generate (
      Imbinop   (Mmov, Register.rax, r, l)))))
-  | Rtltree.Imunop (Mmodil n, r, l) ->
+  | Rtl.Imunop (Mmodil n, r, l) ->
      Imbinop   (Mmov, r, Register.rax, generate (
      Iidiv_imm (n, generate (
      Imbinop   (Mmov, Register.rdx, r, l)))))
-  | Rtltree.Imunop (Mmodir n, r, l) ->
+  | Rtl.Imunop (Mmodir n, r, l) ->
      Iint      (n, Register.rax, generate (
      Iidiv     (r, generate (
      Imbinop   (Mmov, Register.rdx, r, l)))))
-  | Rtltree.Imunop (op, r, l) ->
+  | Rtl.Imunop (op, r, l) ->
      Imunop    (translate_munop op, r, l)
-  | Rtltree.Imbinop (Midiv, r1, r2, l) ->
+  | Rtl.Imbinop (Midiv, r1, r2, l) ->
      Imbinop   (Mmov, r2, Register.rax, generate (
      Iidiv     (r1, generate (
      Imbinop   (Mmov, Register.rax, r2, l)))))  
-  | Rtltree.Iinc_dec (op, r, ofs, l) -> 
+  | Rtl.Iinc_dec (op, r, ofs, l) -> 
      Iinc_dec  (op, r, ofs, l)
-  | Rtltree.Imbinop (Mmod, r1, r2, l) ->
+  | Rtl.Imbinop (Mmod, r1, r2, l) ->
      Imbinop   (Mmov, r2, Register.rax, generate (
      Iidiv     (r1, generate (
      Imbinop   (Mmov, Register.rdx, r2, l)))))
-  | Rtltree.Imbinop (op, r1, r2, l) ->
+  | Rtl.Imbinop (op, r1, r2, l) ->
      Imbinop   (translate_binop op, r1, r2, l)
-  | Rtltree.Imubranch (op, r, true_l, false_l) ->
+  | Rtl.Imubranch (op, r, true_l, false_l) ->
      Imubranch (op, r, true_l, false_l)
-  | Rtltree.Imbbranch (op, r_arg, l_arg, true_l, false_l) ->
+  | Rtl.Imbbranch (op, r_arg, l_arg, true_l, false_l) ->
      Imbbranch (op, r_arg, l_arg, true_l, false_l)
-  | Rtltree.Igoto l ->
+  | Rtl.Igoto l ->
      Igoto l
 
 let fun_entry saved formals entry res_on_stack =
@@ -192,7 +192,7 @@ let fun_exit fname saved retrs exitl =
   let l = move_return_def l retrs in
   graph := Label.M.add exitl (Igoto l) !graph
   
-let funct fname (f:Rtltree.rfundef) =
+let funct fname (f:Rtl.rfundef) =
   Label.M.iter (fun l i -> let i = instr i in graph := Label.M.add l i !graph) f.body; 
   let saved = List.map (fun r -> Register.fresh (), r) Register.callee_saved in
   let n_res = List.length f.result in
@@ -206,5 +206,5 @@ let funct fname (f:Rtltree.rfundef) =
   heap_locals := [];
   { formals = List.length f.formals; locals = f.locals; stored_locals; entry; body }
     
-let programme (p:Rtltree.rprogramme) =
-  Asg.Smap.mapi funct p.functions
+let programme (p:Rtl.rprogramme) =
+  Utils.Smap.mapi funct p.functions

@@ -1,8 +1,8 @@
 
-open Ertltree
+open Ertl
 
 type info = {
-    instr : Ertltree.einstr;
+    instr : Ertl.einstr;
     def : Register.set;
     use : Register.set;
     succ : Label.set;
@@ -41,7 +41,7 @@ let perform_analysis graph =
        Register.S.empty, Register.S.empty
     | Icall (_, n_r_args, _) ->
        Register.S.of_list Register.caller_saved,
-       Register.S.of_list (Utils.prefix n_r_args Register.parameters)
+       Register.S.of_list (fst (Utils.split_list Register.parameters n_r_args))
     | Ireturn ->
        Register.S.empty, Register.S.add Register.rax (Register.S.of_list Register.callee_saved)
   in

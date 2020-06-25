@@ -2,9 +2,7 @@
 (* Abstract syntax tree *)
 (* Parsing grammar *)
 
-type loc = Lexing.position * Lexing.position
-
-type ident = string * loc
+type ident = string * Utils.loc
          
 type typ =
   | Tbasic of ident
@@ -37,8 +35,8 @@ type desc =
   | Ebinop of binop * expr * expr
 
 and expr = {
-    desc: desc;  (* AST expression *)
-    loc: loc;    (* location in code *)
+    desc: desc;      (* AST expression *)
+    loc: Utils.loc;  (* location in code *)
   }
           
 and shstmt =
@@ -66,6 +64,6 @@ and decl =
   | Dfunc of ident * vars list * typ list * block  (* name, list of formal arguments, return type, body *)
 
 type file = {
-    import : bool * loc;   (* true iff "fmt" was imported *)
-    decls : decl list;  (* list of structure/function declarations *)
+    import : bool * Utils.loc;  (* true iff "fmt" was imported *)
+    decls : decl list;          (* list of structure/function declarations *)
   }

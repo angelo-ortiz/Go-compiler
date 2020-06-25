@@ -1,13 +1,13 @@
 
 type t
 
-val fresh : unit -> t
-
 module S : Set.S with type elt = t
 type set = S.t
 
 module M : Map.S with type key = t
 type 'a map = 'a M.t
+
+val fresh : unit -> t
 
 val rax : t (* division quotient *)
 val rbx : t
@@ -29,7 +29,7 @@ val r15 : t
 val tmp1 : t (* temporary register *)
 val tmp2 : t (* temporary register *)
 
-val parameters : t list (* first 6 functions actual parameters *)
+val parameters : t list (* first six actual parameters of a function *)
 val callee_saved : t list
 val caller_saved : t list
 val allocable : set  (* working registers *)

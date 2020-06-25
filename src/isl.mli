@@ -67,6 +67,6 @@ type ifundef = {
   }
          
 type iprogramme = {
-    structs : istrdef Asg.smap;
-    functions: ifundef Asg.smap;
+    structs : istrdef Utils.smap;
+    functions: ifundef Utils.smap;
   }

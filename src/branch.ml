@@ -1,5 +1,5 @@
 
-open Ltltree
+open Ltl
 open UnionFind
    
 let compress entry graph =

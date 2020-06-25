@@ -3,7 +3,7 @@
 
 %{
     open Ast
-    open Utils	
+    open AstUtils	
 %}
 
 %token <Ast.binop> CMP
@@ -138,7 +138,7 @@ expr_list:
 
 assign:
   | vars = rev_expr_list ASSIGN
-	{ List.rev_map Utils.get_ident vars }
+	{ List.rev_map AstUtils.get_ident vars }
 ;
 
 shstmt:
@@ -156,14 +156,14 @@ shstmt:
 
 print:
   | fmt = expr DOT print = IDENT LPAR
-	{ Utils.check_package fmt print $loc(print) }
+	{ AstUtils.check_package fmt print $loc(print) }
 ;
 
 expr:
   | c = CST
 	{ { desc = Ecst c; loc = $loc(c) } }
   | n = INT
-	{ { desc = Ecst (Cint (Utils.check_int n $loc(n))); loc = $loc(n) } }
+	{ { desc = Ecst (Cint (AstUtils.check_int n $loc(n))); loc = $loc(n) } }
   | LPAR e = expr RPAR
 	{ e }
   | v = IDENT
@@ -176,8 +176,8 @@ expr:
   	{ { desc = Eprint values; loc = $loc } }
   | NOT e = expr
 	{ { desc = Eunop (Unot, e); loc = $loc } }
-  | midrule(MINUS { Utils.incr_level () }) e = expr %prec unary_minus
-	{ Utils.decr_level (); Utils.check_neg_int { desc = Eunop (Uneg, e); loc = $loc } }
+  | midrule(MINUS { AstUtils.incr_level () }) e = expr %prec unary_minus
+	{ AstUtils.decr_level (); AstUtils.check_neg_int { desc = Eunop (Uneg, e); loc = $loc } }
   | STAR e = expr %prec unary_star
 	{ { desc = Eunop (Udref, e); loc = $loc } }
   | ADDR e = expr

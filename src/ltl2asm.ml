@@ -1,5 +1,5 @@
 
-open Ltltree
+open Ltl
 open X86_64
 
 let visited = Hashtbl.create 32
@@ -8,6 +8,24 @@ let instructions = ref []
 let data_strings = Hashtbl.create 32
 let max_imm32 = Int64.of_int32 Int32.max_int
 let min_imm32 = Int64.of_int32 Int32.min_int
+
+let inv_ubranch = function
+  | Rtl.Mjz -> Rtl.Mjnz
+  | Rtl.Mjnz -> Rtl.Mjz
+  | Rtl.Mjei n -> Rtl.Mjnei n
+  | Rtl.Mjnei n -> Rtl.Mjei n
+  | Rtl.Mjgi n -> Rtl.Mjlei n
+  | Rtl.Mjgei n -> Rtl.Mjli n
+  | Rtl.Mjli n -> Rtl.Mjgei n
+  | Rtl.Mjlei n -> Rtl.Mjgi n
+
+let inv_bbranch = function
+  | Rtl.Mje -> Rtl.Mjne
+  | Rtl.Mjne -> Rtl.Mje
+  | Rtl.Mjg -> Rtl.Mjle
+  | Rtl.Mjge -> Rtl.Mjl
+  | Rtl.Mjl -> Rtl.Mjge
+  | Rtl.Mjle -> Rtl.Mjg  
 
 let is_imm32 n =
   Int64.compare n max_imm32 < 0 && Int64.compare n min_imm32 > 0
@@ -87,14 +105,14 @@ let q_tmp2 = x_reg Register.tmp2
 let ubranch br c2 j_l =
   let n1, x_br = 
     match br with
-    | Rtltree.Mjz -> 0L, X86_64.jz
-    | Rtltree.Mjnz -> 0L, X86_64.jnz
-    | Rtltree.Mjei n -> n, X86_64.je
-    | Rtltree.Mjnei n -> n, X86_64.jne
-    | Rtltree.Mjgi n -> n, X86_64.jg
-    | Rtltree.Mjgei n -> n, X86_64.jge
-    | Rtltree.Mjli n -> n, X86_64.jl
-    | Rtltree.Mjlei n -> n, X86_64.jle
+    | Rtl.Mjz -> 0L, X86_64.jz
+    | Rtl.Mjnz -> 0L, X86_64.jnz
+    | Rtl.Mjei n -> n, X86_64.je
+    | Rtl.Mjnei n -> n, X86_64.jne
+    | Rtl.Mjgi n -> n, X86_64.jg
+    | Rtl.Mjgei n -> n, X86_64.jge
+    | Rtl.Mjli n -> n, X86_64.jl
+    | Rtl.Mjlei n -> n, X86_64.jle
   in
   let c2_op = operand c2 in
   if n1 = 0L then X86_64.movq c2_op q_tmp1 ++ X86_64.testq q_tmp1 q_tmp1
@@ -105,25 +123,25 @@ let ubranch br c2 j_l =
 let bbranch br c1 c2 j_l =
   let x_br = 
     match br with
-    | Rtltree.Mje -> X86_64.je
-    | Rtltree.Mjne -> X86_64.jne
-    | Rtltree.Mjg -> X86_64.jg
-    | Rtltree.Mjge -> X86_64.jge
-    | Rtltree.Mjl -> X86_64.jl
-    | Rtltree.Mjle -> X86_64.jle
+    | Rtl.Mje -> X86_64.je
+    | Rtl.Mjne -> X86_64.jne
+    | Rtl.Mjg -> X86_64.jg
+    | Rtl.Mjge -> X86_64.jge
+    | Rtl.Mjl -> X86_64.jl
+    | Rtl.Mjle -> X86_64.jle
   in
-  X86_64.cmpq (operand c1) (operand c2) ++
-  x_br (Label.to_string j_l)
+  X86_64.cmpq (operand c1) (operand c2)
+  ++ x_br (Label.to_string j_l)
 
 let uset op c =
   let x_set, n = 
     match op with
-    | Ertltree.Msetei n -> X86_64.sete, n
-    | Ertltree.Msetnei n -> X86_64.setne, n
-    | Ertltree.Msetgi n -> X86_64.setg, n
-    | Ertltree.Msetgei n -> X86_64.setge, n
-    | Ertltree.Msetli n -> X86_64.setl, n
-    | Ertltree.Msetlei n -> X86_64.setle, n
+    | Ertl.Msetei n -> X86_64.sete, n
+    | Ertl.Msetnei n -> X86_64.setne, n
+    | Ertl.Msetgi n -> X86_64.setg, n
+    | Ertl.Msetgei n -> X86_64.setge, n
+    | Ertl.Msetli n -> X86_64.setl, n
+    | Ertl.Msetlei n -> X86_64.setle, n
     | _ -> assert false
   in
   begin
@@ -137,12 +155,12 @@ let uset op c =
 let bset op c1 c2 =
   let x_set = 
     match op with
-    | Ertltree.Msete -> X86_64.sete
-    | Ertltree.Msetne -> X86_64.setne
-    | Ertltree.Msetg -> X86_64.setg
-    | Ertltree.Msetge -> X86_64.setge
-    | Ertltree.Msetl -> X86_64.setl
-    | Ertltree.Msetle -> X86_64.setle
+    | Ertl.Msete -> X86_64.sete
+    | Ertl.Msetne -> X86_64.setne
+    | Ertl.Msetg -> X86_64.setg
+    | Ertl.Msetge -> X86_64.setge
+    | Ertl.Msetl -> X86_64.setl
+    | Ertl.Msetle -> X86_64.setle
     | _ -> assert false
   in
   X86_64.cmpq    c1 c2 ++
@@ -200,28 +218,28 @@ and instr graph l = function
      let c_op = operand c in
      begin
        match op with
-       | Ertltree.Mnot ->
+       | Ertl.Mnot ->
           emit l (X86_64.notq c_op)
-       | Ertltree.Mneg ->
+       | Ertl.Mneg ->
           emit l (X86_64.negq c_op)
-       | Ertltree.Maddi n ->
+       | Ertl.Maddi n ->
           let code =
             if is_imm32 n then X86_64.addq (X86_64.imm32 (Int64.to_int32 n)) c_op
             else X86_64.movq (X86_64.imm64 n) q_tmp1 ++ X86_64.addq q_tmp1 c_op
           in
           emit l code
-       | Ertltree.Mimuli n ->
+       | Ertl.Mimuli n ->
           let code =
             if is_imm32 n then X86_64.imulq (X86_64.imm32 (Int64.to_int32 n)) c_op
             else X86_64.movq (X86_64.imm64 n) q_tmp1 ++ X86_64.imulq q_tmp1 c_op
           in
           emit l code
-       | Ertltree.Minc ->
+       | Ertl.Minc ->
           emit l (X86_64.incq c_op)
-       | Ertltree.Mdec ->
+       | Ertl.Mdec ->
           emit l (X86_64.decq c_op)
-       | Ertltree.Msetei _ | Ertltree.Msetnei _ | Ertltree.Msetgi _
-       | Ertltree.Msetgei _ | Ertltree.Msetli _ | Ertltree.Msetlei _ as op ->
+       | Ertl.Msetei _ | Ertl.Msetnei _ | Ertl.Msetgi _
+       | Ertl.Msetgei _ | Ertl.Msetli _ | Ertl.Msetlei _ as op ->
           emit l (uset op c_op)
      end;
      lin graph next_l
@@ -232,7 +250,7 @@ and instr graph l = function
      emit l (X86_64.cqto ++ X86_64.idivq (operand c));
      lin graph next_l
   | Iinc_dec (op, r, ofs, next_l) ->
-     let inc_dec = match op with Rtltree.IDinc -> X86_64.incq | Rtltree.IDdec -> X86_64.decq
+     let inc_dec = match op with Rtl.IDinc -> X86_64.incq | Rtl.IDdec -> X86_64.decq
      in
      emit l (inc_dec (ind ~reg:r ofs));
      lin graph next_l
@@ -241,13 +259,13 @@ and instr graph l = function
      let c2_op = operand c2 in
      emit l (
          match op with
-         | Ertltree.Madd -> X86_64.addq c1_op c2_op
-         | Ertltree.Msub -> X86_64.subq c1_op c2_op
-         | Ertltree.Mimul -> X86_64.imulq c1_op c2_op
-         | Ertltree.Mxor -> X86_64.xorq c1_op c2_op
-         | Ertltree.Mmov -> X86_64.movq c1_op c2_op
-         | Ertltree.Msete | Ertltree.Msetne | Ertltree.Msetg | Ertltree.Msetge
-         | Ertltree.Msetl | Ertltree.Msetle as op -> bset op c1_op c2_op
+         | Ertl.Madd -> X86_64.addq c1_op c2_op
+         | Ertl.Msub -> X86_64.subq c1_op c2_op
+         | Ertl.Mimul -> X86_64.imulq c1_op c2_op
+         | Ertl.Mxor -> X86_64.xorq c1_op c2_op
+         | Ertl.Mmov -> X86_64.movq c1_op c2_op
+         | Ertl.Msete | Ertl.Msetne | Ertl.Msetg | Ertl.Msetge
+         | Ertl.Msetl | Ertl.Msetle as op -> bset op c1_op c2_op
        );
      lin graph next_l
   | Imubranch (br, c, true_l, false_l) when not (Hashtbl.mem visited false_l) ->
@@ -256,7 +274,7 @@ and instr graph l = function
      lin graph false_l;
      if not (Hashtbl.mem visited true_l) then lin graph true_l
   | Imubranch (br, c, true_l, false_l) when not (Hashtbl.mem visited true_l) ->
-     instr graph l (Imubranch (Utils.inv_ubranch br, c, false_l, true_l))
+     instr graph l (Imubranch (inv_ubranch br, c, false_l, true_l))
   | Imubranch (br, c, true_l, false_l) ->
      need_label true_l;
      need_label false_l;
@@ -268,7 +286,7 @@ and instr graph l = function
      lin graph false_l;
      if not (Hashtbl.mem visited true_l) then lin graph true_l
   | Imbbranch (br, c1, c2, true_l, false_l) when not (Hashtbl.mem visited true_l) ->
-     instr graph l (Imbbranch (Utils.inv_bbranch br, c1, c2, false_l, true_l))
+     instr graph l (Imbbranch (inv_bbranch br, c1, c2, false_l, true_l))
   | Imbbranch (br, c1, c2, true_l, false_l) ->
      need_label true_l;
      need_label false_l;
@@ -294,7 +312,7 @@ and instr graph l = function
 let programme p =
   let text =
     X86_64.globl "main" ++
-      Asg.Smap.fold (fun f { entry; body } txt ->
+      Utils.Smap.fold (fun f { entry; body } txt ->
           let entry, body = Branch.compress entry body in
           lin body entry;
           let instrs = !instructions in

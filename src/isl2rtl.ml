@@ -1,5 +1,5 @@
 
-open Rtltree
+open Rtl
 
 let ptr_fmt = "%p"
 let nil_fmt = "<nil>"
@@ -7,9 +7,9 @@ let string_fmt = "%s"
             
 let graph = ref Label.M.empty
 let locals = Hashtbl.create 32
-let struct_env = ref Asg.Smap.empty
+let struct_env = ref Utils.Smap.empty
 let number_formals_results = Hashtbl.create 32
-let print_functions : (Istree.ident, Rtltree.rfundef) Hashtbl.t = Hashtbl.create 32
+let print_functions : (Isl.ident, Rtl.rfundef) Hashtbl.t = Hashtbl.create 32
 
 let listify =
   fun x -> [x]
@@ -34,42 +34,42 @@ let generate i =
   l
 
 let branch_of_unop = function
-  | Istree.Msetei n -> Rtltree.Mjei n
-  | Istree.Msetnei n -> Rtltree.Mjnei n
-  | Istree.Msetgi n -> Rtltree.Mjgi n
-  | Istree.Msetgei n -> Rtltree.Mjgei n
-  | Istree.Msetli n -> Rtltree.Mjli n
-  | Istree.Msetlei n -> Rtltree.Mjlei n
+  | Isl.Msetei n -> Rtl.Mjei n
+  | Isl.Msetnei n -> Rtl.Mjnei n
+  | Isl.Msetgi n -> Rtl.Mjgi n
+  | Isl.Msetgei n -> Rtl.Mjgei n
+  | Isl.Msetli n -> Rtl.Mjli n
+  | Isl.Msetlei n -> Rtl.Mjlei n
   | _ -> assert false
 
 let branch_of_binop = function
-  | Istree.Msete -> Rtltree.Mje
-  | Istree.Msetne -> Rtltree.Mjne
-  | Istree.Msetg -> Rtltree.Mjg
-  | Istree.Msetge -> Rtltree.Mjge
-  | Istree.Msetl -> Rtltree.Mjl
-  | Istree.Msetle -> Rtltree.Mjle
+  | Isl.Msete -> Rtl.Mje
+  | Isl.Msetne -> Rtl.Mjne
+  | Isl.Msetg -> Rtl.Mjg
+  | Isl.Msetge -> Rtl.Mjge
+  | Isl.Msetl -> Rtl.Mjl
+  | Isl.Msetle -> Rtl.Mjle
   | _ -> assert false
 
 let rec expr destrs e destl =
-  match e.Istree.desc with
-  | Istree.IEint n ->
+  match e.Isl.desc with
+  | Isl.IEint n ->
      generate (Iint (n, List.hd destrs, destl))
-  | Istree.IEstring s ->
+  | Isl.IEstring s ->
      generate (Istring (s, List.hd destrs, destl))
-  | Istree.IEbool b ->
+  | Isl.IEbool b ->
      generate (Ibool (b, List.hd destrs, destl))
-  | Istree.IEnil ->
+  | Isl.IEnil ->
     generate (Iint (0L, List.hd destrs, destl))
-  | Istree.IEmalloc n ->
+  | Isl.IEmalloc n ->
      generate (Imalloc (List.hd destrs, n, destl))
-  | Istree.IEaccess v when v = "_" ->
+  | Isl.IEaccess v when v = "_" ->
      let rxs = multi_fresh_int e.length in
      List.fold_right2 (fun src dst l -> generate (Imbinop (Mmov, src, dst, l))) rxs destrs destl
-  | Istree.IEaccess v ->
+  | Isl.IEaccess v ->
      let rxs = Hashtbl.find locals v in
      List.fold_right2 (fun src dst l -> generate (Imbinop (Mmov, src, dst, l))) rxs destrs destl
-  | Istree.IEselect (str, n) ->
+  | Isl.IEselect (str, n) ->
      let tmps = multi_fresh_int str.length in
      let srcs = Utils.sub_list tmps n e.length in
      let l = List.fold_left2 (fun l src dst ->
@@ -77,7 +77,7 @@ let rec expr destrs e destl =
                ) destl srcs destrs
      in
      expr tmps str l
-  | Istree.IEload (str, n) ->
+  | Isl.IEload (str, n) ->
      assert (str.length = 1);
      let srcrs = multi_fresh_int str.length in
      let src = List.hd srcrs in
@@ -88,7 +88,7 @@ let rec expr destrs e destl =
          ) (destl, n) destrs
      in
      expr srcrs str l
-  | Istree.IEcall (f, actuals) ->
+  | Isl.IEcall (f, actuals) ->
      let n_formals, n_results = Hashtbl.find number_formals_results f in
      let r_args = List.map multi_fresh_int n_formals in
      let f_args = List.flatten r_args in
@@ -97,23 +97,23 @@ let rec expr destrs e destl =
       expr f_args (List.hd actuals) lab
      else (* one actual parameter per formal one *)
        List.fold_right2 expr r_args actuals lab
-  | Istree.IEaddr { length; desc = IEaccess v } ->
+  | Isl.IEaddr { length; desc = IEaccess v } ->
      let rxs = Hashtbl.find locals v in
      generate (Ilea_local (rxs, 0, List.hd destrs, destl))
-  | Istree.IEaddr { length; desc = IEselect (str, n) } ->
+  | Isl.IEaddr { length; desc = IEselect (str, n) } ->
      let rxs = multi_fresh_int str.length in
      expr rxs str (generate (
      Ilea_local (rxs, Utils.word_size * n, List.hd destrs, destl)))
-  | Istree.IEaddr { length; desc = IEload (str, n) } ->
+  | Isl.IEaddr { length; desc = IEload (str, n) } ->
      let tmps = multi_fresh_int str.length in
      expr tmps str (generate (
      Ilea (List.hd tmps, n, List.hd destrs, destl)))
-  | Istree.IEaddr _ -> (* TODO: Really unused??? *)
+  | Isl.IEaddr _ -> (* TODO: Really unused??? *)
      assert false
-  | Istree.IEunop (op, e) ->
+  | Isl.IEunop (op, e) ->
      expr destrs e (generate (
      Imunop (op, List.hd destrs, destl)))
-  | Istree.IEbinop (Msete|Msetne as op, e1, e2) when e1.length > 1 ->
+  | Isl.IEbinop (Msete|Msetne as op, e1, e2) when e1.length > 1 ->
      let tmps1 = multi_fresh_int e1.length in
      let tmps2 = multi_fresh_int e2.length in
      let dst = List.hd destrs in
@@ -125,47 +125,47 @@ let rec expr destrs e destl =
                ) tmps1 tmps2 cont
      in
      expr tmps1 e1 (expr tmps2 e2 l)
-  | Istree.IEbinop (op, e1, e2) ->
+  | Isl.IEbinop (op, e1, e2) ->
      let tmp = Register.fresh () in
      expr destrs e1 (
      expr [tmp] e2 (generate (
      Imbinop (op, tmp, List.hd destrs, destl))))
-  | Istree.IEand (e1, e2) ->
+  | Isl.IEand (e1, e2) ->
      let true_l = expr destrs e2 destl  in
      let false_l = generate (Ibool (false, List.hd destrs, destl)) in
      condition e1 true_l false_l
-  | Istree.IEor (e1, e2) ->
+  | Isl.IEor (e1, e2) ->
      let true_l = generate (Ibool (true, List.hd destrs, destl))  in
      let false_l = expr destrs e2 destl in
      condition e1 true_l false_l
-  | Istree.IElist _ -> (* used only in assignments *)
+  | Isl.IElist _ -> (* used only in assignments *)
      assert false
 
 and condition e true_l false_l =
   match e.desc with
-  | Istree.IEbool b ->
+  | Isl.IEbool b ->
      generate (Igoto (if b then true_l else false_l))
-  | Istree.IEand (e1, e2) ->
+  | Isl.IEand (e1, e2) ->
      condition e1 (condition e2 true_l false_l) false_l
-  | Istree.IEor (e1, e2) ->
+  | Isl.IEor (e1, e2) ->
      condition e1 true_l (condition e2 true_l false_l)
-  | Istree.IEunop (Msetei n, e) ->
+  | Isl.IEunop (Msetei n, e) ->
      let tmp = Register.fresh () in
      expr [tmp] e (generate (
      let op = if n = 0L then Mjz else Mjei n in
      Imubranch (op, tmp, true_l, false_l)))
-  | Istree.IEunop (Msetnei n, e) -> (* <> n is more likely than = n *)
+  | Isl.IEunop (Msetnei n, e) -> (* <> n is more likely than = n *)
      let tmp = Register.fresh () in
      expr [tmp] e (generate (
      let op = if n = 0L then Mjz else Mjei n in
      Imubranch (op, tmp, false_l, true_l)))
-  | Istree.IEunop (Msetgi n | Msetgei n | Msetli n | Msetlei n as op, e) ->
+  | Isl.IEunop (Msetgi n | Msetgei n | Msetli n | Msetlei n as op, e) ->
      let tmp = Register.fresh () in
      expr [tmp] e (generate (
      Imubranch (branch_of_unop op, tmp, true_l, false_l)))
-  | Istree.IEunop (Mnot, e) ->
+  | Isl.IEunop (Mnot, e) ->
      condition e false_l true_l
-  | Istree.IEbinop (Msete|Msetne as op, e1, e2) ->
+  | Isl.IEbinop (Msete|Msetne as op, e1, e2) ->
      let tmps1 = multi_fresh_int e1.length in
      let tmps2 = multi_fresh_int e2.length in
      let cont, break = if op = Msete then  true_l, false_l else false_l, true_l in
@@ -174,7 +174,7 @@ and condition e true_l false_l =
                ) tmps1 tmps2 cont
      in
      expr tmps1 e1 (expr tmps2 e2 l)
-  | Istree.IEbinop (Msetg | Msetge | Msetl | Msetle as op, e1, e2) ->
+  | Isl.IEbinop (Msetg | Msetge | Msetl | Msetle as op, e1, e2) ->
      let tmp1 = Register.fresh () in
      let tmp2 = Register.fresh () in
      expr [tmp1] e1 (
@@ -187,20 +187,20 @@ and condition e true_l false_l =
        )
 
 let assign srcrs e destl =
-  match e.Istree.assignee with
-  | Istree.Avar v when v = "_" ->
+  match e.Isl.assignee with
+  | Isl.Avar v when v = "_" ->
      let dstrs = multi_fresh_int e.length in
      List.fold_right2 (fun src dst l -> generate (Imbinop (Mmov, src, dst, l))) srcrs dstrs destl
-  | Istree.Avar v ->
+  | Isl.Avar v ->
      let dstrs = Hashtbl.find locals v in
      List.fold_right2 (fun src dst l -> generate (Imbinop (Mmov, src, dst, l))) srcrs dstrs destl
-  | Istree.Afield_var (v, n) ->
+  | Isl.Afield_var (v, n) ->
      let tmps = Hashtbl.find locals v in
      let dstrs = Utils.sub_list tmps n e.length in
      List.fold_right2 (fun src dst l ->
          generate (Imbinop (Mmov, src, dst, l))
        ) srcrs dstrs destl
-  | Istree.Afield (str, n) ->
+  | Isl.Afield (str, n) ->
      let tmps = multi_fresh_int str.length in
      let dstrs = Utils.sub_list tmps n e.length in
      let l = List.fold_left2 (fun l src dst ->
@@ -208,7 +208,7 @@ let assign srcrs e destl =
                ) destl srcrs dstrs
      in
      expr tmps str l
-  | Istree.Adref (e, n) ->
+  | Isl.Adref (e, n) ->
      let dstr = Register.fresh () in
      let l, _ = List.fold_left (fun (l, n) srcr ->
                  generate (Istore (srcr, dstr, n, l)), n + Utils.word_size
@@ -231,7 +231,7 @@ let rec translate_print lab ?(seq=true) ?(generate=generate) types_regs =
     | [], _ | _, [] ->
        assert false
     | ty :: types, in_regs ->
-       let rxs, in_regs = Utils.split_list in_regs (Is.length_of_type ty) in
+       let rxs, in_regs = Utils.split_list in_regs (Asg2isl.length_of_type ty) in
        match format_or_type ty with
        | Format nxt_fmt ->
           let not_str = nxt_fmt <> string_fmt in
@@ -287,7 +287,7 @@ let rec translate_print lab ?(seq=true) ?(generate=generate) types_regs =
        let false_l =
          match ty with
          | TTstruct str ->
-            let length = Is.length_of_type ty in
+            let length = Asg2isl.length_of_type ty in
             let fields = multi_fresh_int length in
             let lab = tr_print_struct generate lab str fields in
             let lab = generate (Iprint ([fmt_reg], lab)) in
@@ -330,7 +330,7 @@ and tr_print_struct generate lab str regs =
       let lab = generate (Istring ("}", fmt_end, lab)) in
       let lab =
         translate_print lab ~seq:false ~generate
-          (List.map snd (Asg.Smap.find str !struct_env), regs)
+          (List.map snd (Utils.Smap.find str !struct_env), regs)
       in
       let fmt_begin = Register.fresh () in
       let lab = generate (Iprint ([fmt_begin], lab)) in
@@ -341,11 +341,11 @@ and tr_print_struct generate lab str regs =
      
 let rec stmt retrs s exitl destl =
   match s with
-  | Istree.ISexpr e ->
+  | Isl.ISexpr e ->
      begin
        let reduce_munop = function
-         | Istree.Minc -> IDinc
-         | Istree.Mdec -> IDdec
+         | Isl.Minc -> IDinc
+         | Isl.Mdec -> IDdec
          | _ -> assert false
        in
        match e.desc with
@@ -363,43 +363,43 @@ let rec stmt retrs s exitl destl =
        | _ ->
           assert false
      end
-  | Istree.IScall (f, actuals) ->
+  | Isl.IScall (f, actuals) ->
      let _, l_results = Hashtbl.find number_formals_results f in
      let n_results = Utils.sum_of_list l_results in
      let destrs = multi_fresh_int n_results in
      (* the type is unused in `expr` so TTuntyped should suffice *)
      expr destrs { length = n_results; desc = IEcall (f, actuals); typ = TTuntyped } destl
-  | Istree.ISprint es ->
-     let destrs = List.map (fun (e:Istree.iexpr) -> multi_fresh_int e.length) es in
+  | Isl.ISprint es ->
+     let destrs = List.map (fun (e:Isl.iexpr) -> multi_fresh_int e.length) es in
      let types =
        match es with
        | [{ length; desc = IEcall _; typ = TTtuple typ}] -> typ
-       | _ -> List.map (fun e -> e.Istree.typ) es
+       | _ -> List.map (fun e -> e.Isl.typ) es
      in
      let l = translate_print destl (types, List.flatten destrs) in
      List.fold_right2 expr destrs es l
-  | Istree.ISif (e, bif, belse) ->
+  | Isl.ISif (e, bif, belse) ->
      condition e
        (block retrs bif exitl destl)
        (block retrs belse exitl destl)
-  | Istree.ISassign (vars, [{ length; desc = IEcall _ } as e]) ->
-     let srcrs = List.map (fun (v:Istree.assign) -> multi_fresh_int v.length) vars in
+  | Isl.ISassign (vars, [{ length; desc = IEcall _ } as e]) ->
+     let srcrs = List.map (fun (v:Isl.assign) -> multi_fresh_int v.length) vars in
      let l = List.fold_right2 assign srcrs vars destl in
      expr (List.flatten srcrs) e l
-  | Istree.ISassign (vars, [{ length; desc = IElist values }]) ->
+  | Isl.ISassign (vars, [{ length; desc = IElist values }]) ->
      assert (List.tl vars = []);
-     let srcrs = List.map (fun (v:Istree.iexpr) -> multi_fresh_int v.length) values in
+     let srcrs = List.map (fun (v:Isl.iexpr) -> multi_fresh_int v.length) values in
      let l = assign (List.flatten srcrs) (List.hd vars) destl in
      List.fold_right2 expr srcrs values l
-  | Istree.ISassign (vars, values) ->
-     let srcrs = List.map (fun (v:Istree.iexpr) -> multi_fresh_int v.length) values in
+  | Isl.ISassign (vars, values) ->
+     let srcrs = List.map (fun (v:Isl.iexpr) -> multi_fresh_int v.length) values in
      let l = List.fold_right2 assign srcrs vars destl in
      List.fold_right2 expr srcrs values l
-  | Istree.ISreturn [{ length; desc = IEcall (f, actuals) } as e] ->
+  | Isl.ISreturn [{ length; desc = IEcall (f, actuals) } as e] ->
      expr (List.flatten retrs) e exitl
-  | Istree.ISreturn es ->
+  | Isl.ISreturn es ->
      List.fold_right2 expr retrs es exitl
-  | Istree.ISfor (e, bfor) ->
+  | Isl.ISfor (e, bfor) ->
      let l = Label.fresh () in
      let entry = condition e (block retrs bfor exitl l) destl in
      graph := Label.M.add l (Igoto entry) !graph;
@@ -408,7 +408,7 @@ let rec stmt retrs s exitl destl =
 and block retrs b exitl destl =
   List.fold_right (fun st dlab -> stmt retrs st exitl dlab) b destl
   
-let funct (f:Istree.ifundef) =
+let funct (f:Isl.ifundef) =
   let r_formals = List.map (fun (_, n) -> multi_fresh_int n) f.formals in
   List.iter2 (fun (v, _) rs -> Hashtbl.add locals v rs) f.formals r_formals; 
   let result = List.map (fun len -> multi_fresh_int len) f.result in
@@ -427,12 +427,12 @@ let funct (f:Istree.ifundef) =
   { formals = List.flatten r_formals; result = List.flatten result;
     locals = local_vars; entry; exit_; body } 
   
-let programme (p:Istree.iprogramme) =
-  let add_retrs f (def:Istree.ifundef) =
+let programme (p:Isl.iprogramme) =
+  let add_retrs f (def:Isl.ifundef) =
     Hashtbl.add number_formals_results f (List.map snd def.formals, def.result)
   in
   struct_env := p.structs;
-  Asg.Smap.iter add_retrs p.functions;
-  let functions = Asg.Smap.map funct p.functions in
-  let functions = Hashtbl.fold Asg.Smap.add print_functions functions in
+  Utils.Smap.iter add_retrs p.functions;
+  let functions = Utils.Smap.map funct p.functions in
+  let functions = Hashtbl.fold Utils.Smap.add print_functions functions in
   { structs = p.structs; functions }

@@ -3,7 +3,6 @@
 
 open Lexing
 open Parser
-open Utils
 
 let usage = "usage: pgoc [options] file.go"
 
@@ -36,16 +35,16 @@ let () =
     let p = Parser.file Lexer.next_token lb in
     close_in ch;
     if !parse_only then exit 0;
-    let p = Type_checker.programme p in
+    let p = TypeChecker.programme p in
     if !type_only then exit 0;
-    let p = Is.programme p in
+    let p = Asg2isl.programme p in
     (* Pp.is_file p; *)
-    let p = Rtl.programme p in
-    let p = Ertl.programme p in
+    let p = Isl2rtl.programme p in
+    let p = Rtl2ertl.programme p in
     (* Pp.ertl_file p; *)
-    let p = Ltl.programme p in
+    let p = Ertl2ltl.programme p in
     (* Pp.ltl_file p; *)
-    let code = Lin.programme p in
+    let code = Ltl2asm.programme p in
     let ch = open_out (Filename.chop_suffix file ".go" ^ ".s") in
     let fmt = Format.formatter_of_out_channel ch in
     X86_64.print_program fmt code;
@@ -60,11 +59,11 @@ let () =
      Format.eprintf "%ssyntax error%s: %s@." Utils.red
        Utils.close (Utils.format_mid_string "unexpected token " (lexeme lb) "");
      exit 1
-  | Utils.Syntax_error (loc, msg) ->
+  | AstUtils.Syntax_error (loc, msg) ->
      report loc;
      Format.eprintf "%ssyntax error%s: %s@." Utils.red Utils.close msg;
      exit 1
-  | Utils.Type_error (loc, msg) ->
+  | TypeChecker.Type_error (loc, msg) ->
      report loc;
      Format.eprintf "%stype error%s: %s@." Utils.red Utils.close msg;
      exit 1

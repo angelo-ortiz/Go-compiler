@@ -11,13 +11,13 @@ type linstr =
   | Iload of Register.t * int * Register.t * Label.t (* src | offset | dst *)
   | Istore of Register.t * Register.t * int * Label.t (* src | dst | offset *)
   | Icall of string * Label.t
-  | Imunop of Ertltree.emunop * colour * Label.t
+  | Imunop of Ertl.emunop * colour * Label.t
   | Iidiv_imm of int64 * Label.t
   | Iidiv of colour * Label.t
-  | Iinc_dec of Rtltree.inc_dec * Register.t * int * Label.t (* src | offset *)
-  | Imbinop of Ertltree.embinop * colour * colour * Label.t
-  | Imubranch of Rtltree.mubranch * colour * Label.t * Label.t (* true | false *)
-  | Imbbranch of Rtltree.mbbranch * colour * colour * Label.t * Label.t (* 2nd arg | 1st arg *)
+  | Iinc_dec of Rtl.inc_dec * Register.t * int * Label.t (* src | offset *)
+  | Imbinop of Ertl.embinop * colour * colour * Label.t
+  | Imubranch of Rtl.mubranch * colour * Label.t * Label.t (* true | false *)
+  | Imbbranch of Rtl.mbbranch * colour * colour * Label.t * Label.t (* 2nd arg | 1st arg *)
   | Igoto of Label.t
   | Ipush of colour * Label.t
   | Ipop of Register.t * Label.t
@@ -33,4 +33,4 @@ type lfundef = {
     body : linstr Label.map;
   }
 
-type lprogramme = lfundef Asg.smap
+type lprogramme = lfundef Utils.smap

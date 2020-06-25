@@ -26,10 +26,10 @@ type rinstr =
   | Istore of Register.t * Register.t * int * Label.t (* src | dst | offset *)
   | Icall of Register.t list * string * Register.t list * Label.t (* results | name | args *)
   | Iprint of Register.t list * Label.t (* expressions *)
-  | Imunop of Istree.munop * Register.t * Label.t
+  | Imunop of Isl.munop * Register.t * Label.t
   (* | Iinc_dec_local of inc_dec * Register.t list * int * Label.t (\* local Register.t | offset *\) *)
   | Iinc_dec of inc_dec * Register.t * int * Label.t (* src/dst | offset *)
-  | Imbinop of Istree.mbinop * Register.t * Register.t * Label.t
+  | Imbinop of Isl.mbinop * Register.t * Register.t * Label.t
   | Imubranch of mubranch * Register.t * Label.t * Label.t (* true | false *)
   | Imbbranch of mbbranch * Register.t * Register.t * Label.t * Label.t (* 2nd arg | 1st arg *)
   | Igoto of Label.t
@@ -46,6 +46,6 @@ type rfundef = {
   }
 
 type rprogramme = {
-    structs : Istree.istrdef Asg.smap;
-    functions : rfundef Asg.smap;
+    structs : Isl.istrdef Utils.smap;
+    functions : rfundef Utils.smap;
   }

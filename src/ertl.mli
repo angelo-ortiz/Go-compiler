@@ -23,11 +23,11 @@ type einstr =
   | Imunop of emunop * Register.t * Label.t
   | Iidiv_imm of int64 * Label.t
   | Iidiv of Register.t * Label.t
-  (* | Iinc_dec_local of Rtltree.inc_dec * Register.t list * int * Label.t (\* local Register.t | offset *\) *)
-  | Iinc_dec of Rtltree.inc_dec * Register.t * int * Label.t (* src | offset *)
+  (* | Iinc_dec_local of Rtl.inc_dec * Register.t list * int * Label.t (\* local Register.t | offset *\) *)
+  | Iinc_dec of Rtl.inc_dec * Register.t * int * Label.t (* src | offset *)
   | Imbinop of embinop * Register.t * Register.t * Label.t
-  | Imubranch of Rtltree.mubranch * Register.t * Label.t * Label.t (* true | false *)
-  | Imbbranch of Rtltree.mbbranch * Register.t * Register.t * Label.t * Label.t (* 2nd arg | 1st arg *)
+  | Imubranch of Rtl.mubranch * Register.t * Label.t * Label.t (* true | false *)
+  | Imbbranch of Rtl.mbbranch * Register.t * Register.t * Label.t * Label.t (* 2nd arg | 1st arg *)
   | Igoto of Label.t
   | Ialloc_frame of Label.t
   | Ifree_frame of Label.t
@@ -47,4 +47,4 @@ type efundef = {
     body : einstr Label.map;
   }
 
-type eprogramme = efundef Asg.smap
+type eprogramme = efundef Utils.smap

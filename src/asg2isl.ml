@@ -1,10 +1,10 @@
 
 open Asg
-open Istree
+open Isl
 
 exception Found_offset of int
    
-let struct_env = ref Asg.Smap.empty
+let struct_env = ref Utils.Smap.empty
 
 let rec _length_of_type fs = function
   | TTint | TTbool | TTstring | TTpointer _ ->
@@ -25,8 +25,11 @@ let length_of_struct =
   let rec f s =
     try Hashtbl.find h s
     with Not_found ->
-      let str = Smap.find s !struct_env in
-      let len = List.fold_left (fun len (_, ty) -> len + _length_of_type f ty) 0 str.fields
+      let str = Utils.Smap.find s !struct_env in
+      let len =
+        List.fold_left (fun len (_, ty) ->
+            len + _length_of_type f ty
+          ) 0 str.fields
       in
       Hashtbl.add h s len;
       len
@@ -41,7 +44,7 @@ let struct_of_texpr = function
   | _ -> assert false
     
 let field_offset str fd =
-  let str = Asg.Smap.find str !struct_env in
+  let str = Utils.Smap.find str !struct_env in
   try
     let _ = 
       List.fold_left
@@ -70,7 +73,7 @@ let default_value typ =
        let length = length_of_type typ in
        { length; desc = IEbool false; typ } :: acc, size + length
     | TTstruct str ->
-       let str = Asg.Smap.find str !struct_env in
+       let str = Utils.Smap.find str !struct_env in
        List.fold_left loop (acc, size) (List.map snd str.fields)
     | TTpointer _ ->
        let length = length_of_type typ in
@@ -383,7 +386,7 @@ let rec stmt locals body = function
      locals, ISfor (expr cond, List.rev b_for) :: body
     
 and block locals body b =
-  let locals = Smap.fold (fun id tvar vs ->
+  let locals = Utils.Smap.fold (fun id tvar vs ->
                    (prepend_bnumber tvar, length_of_type tvar.ty) :: vs
                  ) b.vars locals
   in
@@ -409,5 +412,5 @@ let funct (f:Asg.tfundef) =
   
 let programme (p:Asg.tprogramme) =
   struct_env := p.structs;
-  { structs = Asg.Smap.map (fun str -> str.fields) p.structs;
-    functions = Smap.map funct p.functions }
+  { structs = Utils.Smap.map (fun str -> str.fields) p.structs;
+    functions = Utils.Smap.map funct p.functions }

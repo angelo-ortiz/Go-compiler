@@ -17,17 +17,14 @@ type tvar = {
     id : string;          (* variable name *)
     b_number : int;       (* block's number *)
     ty: t_typ;            (* type *)
-    loc : Ast.loc;        (* location in code *)
+    loc : Utils.loc;        (* location in code *)
   }
-
-module Smap = Map.Make(String)
-type 'a smap = 'a Smap.t
 
 type texpr = {
     tdesc : tdesc;         (* typed expression *)
     typ : t_typ;           (* type *)
     is_assignable : bool;  (* true iff left-value *)
-    loc : Ast.loc;         (* location in code *)
+    loc : Utils.loc;         (* location in code *)
   }
            
 and tdesc =
@@ -45,7 +42,7 @@ and tdesc =
   | TEbinop of Ast.binop * texpr * texpr
 
 and tblock = {
-    vars : tvar smap;    (* declared variables *)
+    vars : tvar Utils.smap;    (* declared variables *)
     stmts : tstmt list;  (* list of statements *)
     number : int;        (* block's number *)
   }
@@ -69,17 +66,17 @@ type fblock =
            
 type tstrdef = {
     fields : (string * t_typ) list;  (* list of (field, type) *)
-    loc : Ast.loc;                   (* declaration locus *)
+    loc : Utils.loc;                   (* declaration locus *)
   }
                  
 type tfundef = {
     formals: (string * t_typ) list;  (* list of (formal, type)*)
     rtype : t_typ;                   (* return type *)
     body : fblock;                   (* body *)
-    loc : Ast.loc;                   (* declaration locus *)
+    loc : Utils.loc;                   (* declaration locus *)
   }
          
 type tprogramme = {
-    structs : tstrdef smap;
-    functions : tfundef smap;
+    structs : tstrdef Utils.smap;
+    functions : tfundef Utils.smap;
   }

@@ -1,18 +1,18 @@
 
 type t = string
 
+module S = Set.Make(String)
+type set = S.t
+
+module M = Map.Make(String)
+type 'a map = 'a M.t
+
 let counter = ref 0
        
 let fresh () =
   incr counter;
   Format.sprintf "#%d" !counter
 
-module S = Set.Make(String)
-type set = S.t
-
-module M = Map.Make(String)
-type 'a map = 'a M.t
-         
 let rax = "%rax"
 let rbx = "%rbx"
 let rcx = "%rcx"
