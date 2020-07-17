@@ -10,9 +10,11 @@ let parse_only = ref false
 let type_only = ref false
 
 let spec =
-  [ "--parse-only", Arg.Set parse_only, " stop after parsing";
-    "--type-only", Arg.Set type_only, " stop after typing"; ]
-
+  [
+    "--parse-only", Arg.Set parse_only, " stop after parsing";
+    "--type-only", Arg.Set type_only, " stop after typing"
+  ]
+  
 let file =
   let file = ref None in
   let set_file s =
@@ -38,8 +40,9 @@ let () =
     let p = TypeChecker.programme p in
     if !type_only then exit 0;
     let p = Asg2isl.programme p in
-    (* Pp.is_file p; *)
+    (* Pp.isl_file p; *)
     let p = Isl2rtl.programme p in
+    (* Pp.rtl_file p; *)
     let p = Rtl2ertl.programme p in
     (* Pp.ertl_file p; *)
     let p = Ertl2ltl.programme p in

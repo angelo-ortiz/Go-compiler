@@ -78,9 +78,10 @@ let move_return_def l = function
      move r Register.rax l
   | retrs ->
      let ofs = Utils.word_size lsl 1 in
-     fst (List.fold_left (fun (l, ofs) r ->
-              set_result r ofs l, ofs + Utils.word_size
-            ) (l, ofs) retrs)
+     fst (
+         List.fold_left (fun (l, ofs) r ->
+             set_result r ofs l, ofs + Utils.word_size
+           ) (l, ofs) retrs)
 
 let instr = function
   | Rtl.Iint (n, r, l) ->
@@ -98,9 +99,10 @@ let instr = function
      let fst_rx = List.hd rxs in
      if not (Register.S.mem fst_rx !heap_locals_set) then begin
          heap_locals := rxs :: !heap_locals;
-         heap_locals_set := List.fold_left (fun set r ->
-                               Register.S.add r set
-                             ) !heap_locals_set rxs
+         heap_locals_set :=
+           List.fold_left (fun set r ->
+               Register.S.add r set
+             ) !heap_locals_set rxs
        end;
      Ilea_local (fst_rx, ofs, dst, l)
   | Rtl.Ilea (src, ofs, dst, l) -> 
@@ -121,7 +123,8 @@ let instr = function
      let l = generate (Icall (f, n, move_return_call l res)) in
      (* reserve stack space for results only if more than one *)
      let l =
-       if size_res > Utils.word_size then generate (Ialloc_stack (Int32.of_int size_res, l))
+       if size_res > Utils.word_size
+       then generate (Ialloc_stack (Int32.of_int size_res, l))
        else l
      in
      let l = List.fold_right (fun r l -> push_param r l) stack l in
@@ -175,8 +178,10 @@ let instr = function
 let fun_entry saved formals entry res_on_stack =
   let form_param, stack = assoc_arguments formals in
   let ofs = Utils.word_size * (2 + res_on_stack) in
-  let l, _ = List.fold_right (* get first the first stored argument *)
-            (fun f (l, ofs) -> get_param ofs f l, ofs + Utils.word_size) stack (entry, ofs)
+  let l, _ = (* get first the first stored argument *)
+    List.fold_right (fun f (l, ofs) ->
+        get_param ofs f l, ofs + Utils.word_size
+      ) stack (entry, ofs)
   in
   let l = List.fold_right (fun (f, r) l -> move r f l) form_param l in
   let l = List.fold_right (fun (s, r) l -> move r s l) saved l in
@@ -184,8 +189,9 @@ let fun_entry saved formals entry res_on_stack =
 
 let fun_exit fname saved retrs exitl =
   let l = generate Ireturn in
-  let l = if fname <> "main" then l
-          else generate (Imbinop (Mxor, Register.rax, Register.rax, l)) (* exit *)
+  let l =
+    if fname <> "main" then l
+    else generate (Imbinop (Mxor, Register.rax, Register.rax, l)) (* exit *)
   in
   let l = generate (Ifree_frame l) in
   let l = List.fold_right (fun (s, r) l -> move s r l) saved l in
@@ -193,7 +199,9 @@ let fun_exit fname saved retrs exitl =
   graph := Label.M.add exitl (Igoto l) !graph
   
 let funct fname (f:Rtl.rfundef) =
-  Label.M.iter (fun l i -> let i = instr i in graph := Label.M.add l i !graph) f.body; 
+  Label.M.iter (fun l i ->
+      let i = instr i in graph := Label.M.add l i !graph
+    ) f.body;
   let saved = List.map (fun r -> Register.fresh (), r) Register.callee_saved in
   let n_res = List.length f.result in
   let res_on_stack = if n_res > 1 then n_res else 0 in 

@@ -4,8 +4,8 @@ type 'a element = {
   }
                 
 and 'a link =
-  | Repr of 'a info      (* The element is a class representative *)
-  | Child of 'a element  (* The element is a child of its 'content' *)
+  | Repr of 'a info      (* class representative *)
+  | Child of 'a element  (* child of its 'content' *)
 
 and 'a info = {
     mutable rank : int;

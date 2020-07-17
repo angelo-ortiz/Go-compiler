@@ -22,16 +22,13 @@ let position_of_loc (b, e) =
   
 let sub_list l start len =
   let rec loop acc i n = function
-    | [] when n > 0 ->
-       failwith "Not enough elements in the list"
-    | [] ->
+    | _ when n = 0 ->
        List.rev acc
+    | [] ->
+       failwith "Not enough elements in the list"
     | x :: l ->
-       if n = 0 then List.rev acc
-       else begin
-           if i < start then loop acc (i+1) n l
-           else loop (x :: acc) (i+1) (n-1) l
-         end
+       if i < start then loop acc (i+1) n l
+       else loop (x :: acc) (i+1) (n-1) l
   in
   loop [] 0 len l
 
@@ -46,14 +43,5 @@ let split_list l n =
 let sum_of_list =
   List.fold_left (+) 0
     
-let rec string_of_list fmt string_of_el = function
-  | [] ->
-     ()
-  | [x] ->
-     string_of_el fmt x
-  | x :: xs ->
-     let partial fmt = string_of_list fmt string_of_el in
-     Format.fprintf fmt "%a %a" string_of_el x partial xs
-
 let format_mid_string left centre right =
   Format.sprintf "%s%s%s%s%s%s%s" left invert yellow centre close close right

@@ -40,5 +40,5 @@ let caller_saved = rax :: r10 :: (* r11 :: *) parameters
 
 let allocable = S.of_list (callee_saved @ caller_saved)
                  
-let string_of_reg fmt r =
+let print fmt r =
   Format.fprintf fmt "%s" r

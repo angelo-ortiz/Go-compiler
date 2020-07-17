@@ -1,5 +1,5 @@
 
-(* Instruction selection grammar *) 
+(* Instruction selection language grammar *) 
 
 type ident = string
 
@@ -28,8 +28,8 @@ and idesc =
   | IElist of iexpr list
   | IEmalloc of int32
   | IEaccess of ident
-  | IEselect of iexpr * int  (* C's "." *)
-  | IEload of iexpr * int    (* C's "->" *)
+  | IEselect of iexpr * int            (* C's "." *)
+  | IEload of iexpr * int              (* C's "->" *)
   | IEcall of ident * iexpr list
   | IEaddr of iexpr
   | IEunop of munop * iexpr
@@ -38,15 +38,15 @@ and idesc =
   | IEor of iexpr * iexpr
 
 type assign = {
-    length : int; (* number of 8-byte blocks *)
+    length : int;  (* number of 8-byte blocks *)
     assignee : assignee;
   }
 
 and assignee =
   | Avar of ident
-  | Afield_var of ident * int (* e.n <- && e is an lvar *)
-  | Afield of iexpr * int     (* e.n <- *)
-  | Adref of iexpr * int      (* e->n <- | *e <- *)
+  | Afield_var of ident * int  (* e.n = ? && e is an lvar *)
+  | Afield of iexpr * int      (* e.n = ? *)
+  | Adref of iexpr * int       (* e->n = ? || *e = ? *)
 
 type istmt =
   | ISexpr of iexpr
@@ -61,7 +61,7 @@ type istrdef = (string * Asg.t_typ) list
                  
 type ifundef = {
     formals : (ident * int) list;
-    result : int list; (* list of results' size in 8-byte blocks *)
+    result : int list; (* list of results size in 8-byte blocks *)
     locals : (ident * int) list;
     body: istmt list;
   }

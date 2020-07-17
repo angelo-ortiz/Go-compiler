@@ -15,14 +15,58 @@ let struct_env = ref Utils.Smap.empty
 let func_env = ref Utils.Smap.empty
 let import_fmt = ref false
 let used_fmt = ref false
-(* used for block enumeration *)
-let block_number = ref (-1)
+let block_number = ref (-1) (* used for block enumeration *)
 
 let type_error loc msg =
   raise (Type_error (loc, msg))
 
 let next_bnumber () =
   incr block_number; !block_number
+
+let rec print_type fmt = function
+  | TTint -> Format.fprintf fmt "int"
+  | TTbool -> Format.fprintf fmt "bool"
+  | TTstring -> Format.fprintf fmt "str"
+  | TTnil | TTuntyped -> assert false
+  | TTunit -> Format.fprintf fmt "unit"
+  | TTstruct s -> Format.fprintf fmt "%s" s
+  | TTtuple tl -> print_type_l fmt tl
+  | TTpointer t -> Format.fprintf fmt "*%a" print_type t
+
+and print_type_l fmt tl =
+  let rec print fmt = function
+    | [] -> Format.fprintf fmt ")"
+    | [t] -> Format.fprintf fmt "%a)" print_type t
+    | t :: tl -> Format.fprintf fmt "%a,%a" print_type t print tl
+  in
+  Format.fprintf fmt "(";
+  print fmt tl
+
+let rec print_texpr fmt te =
+  match te.tdesc with
+  | TEint n ->
+     Format.fprintf fmt "%s" (Int64.to_string n)
+  | TEstring str ->
+     Format.fprintf fmt "%s" str
+  | TEbool b ->
+     Format.fprintf fmt "%s" (if b then "true" else "false")
+  | TEnil ->
+     Format.fprintf fmt "nil"
+  | TEnew typ ->
+     Format.fprintf fmt "new(%a)" print_type typ
+  | TEident tvar ->
+     Format.fprintf fmt "%s" tvar.id
+  | TEselect (struct_, field) | TEselect_dref (struct_, field) ->
+     Format.fprintf fmt "%a.%s" print_texpr struct_ field
+  | TEcall (f, args) ->
+     Format.fprintf fmt "%s()" f 
+  | TEprint _ ->
+     Format.fprintf fmt "fmt.Print()"
+  | TEunop (op, te) ->
+     Format.fprintf fmt "%a(%a)" AstUtils.print_unop op print_texpr te
+  | TEbinop (op, l, r) ->
+     Format.fprintf fmt "@[(%a %a@ %a)@]" print_texpr l
+       AstUtils.print_binop op print_texpr r
 
 let type_of_string loc = function
   | "int" ->
@@ -38,49 +82,6 @@ let type_of_string loc = function
      with Not_found ->
        type_error loc (Format.asprintf "undefined: %s" str)
 
-let rec string_of_type_list fmt tl =
-  Format.fprintf fmt "(";
-  List.iteri (fun i t ->
-      Format.fprintf fmt "%s%a" (if i > 0 then "," else "") string_of_type t
-    ) tl;
-  Format.fprintf fmt ")"
-  
-and string_of_type fmt = function
-  | TTint -> Format.fprintf fmt "int"
-  | TTbool -> Format.fprintf fmt "bool"
-  | TTstring -> Format.fprintf fmt "str"
-  | TTnil | TTuntyped -> assert false
-  | TTunit -> Format.fprintf fmt "unit"
-  | TTstruct s -> Format.fprintf fmt "%s" s
-  | TTtuple tl -> string_of_type_list fmt tl
-  | TTpointer t -> Format.fprintf fmt "*%a" string_of_type t
-
-let rec string_of_texpr fmt te =
-  match te.tdesc with
-  | TEint n ->
-     Format.fprintf fmt "%s" (Int64.to_string n)
-  | TEstring str ->
-     Format.fprintf fmt "%s" str
-  | TEbool b ->
-     Format.fprintf fmt "%s" (if b then "true" else "false")
-  | TEnil ->
-     Format.fprintf fmt "nil"
-  | TEnew typ ->
-     Format.fprintf fmt "new(%a)" string_of_type typ
-  | TEident tvar ->
-     Format.fprintf fmt "%s" tvar.id
-  | TEselect (struct_, field) | TEselect_dref (struct_, field) ->
-     Format.fprintf fmt "%a.%s" string_of_texpr struct_ field
-  | TEcall (f, args) ->
-     Format.fprintf fmt "%s()" f 
-  | TEprint _ ->
-     Format.fprintf fmt "fmt.Print()"
-  | TEunop (op, texpr) ->
-     Format.fprintf fmt "%a(%a)" AstUtils.string_of_unop op string_of_texpr texpr
-  | TEbinop (op, l, r) ->
-     Format.fprintf fmt "@[(%a %a@ %a)@]"
-       string_of_texpr l AstUtils.string_of_binop op string_of_texpr r
-
 let rec type_of_expr e =
   match e.Ast.desc with 
   | Ast.Eident str ->
@@ -90,7 +91,7 @@ let rec type_of_expr e =
      TTpointer typ
   | _ ->
      type_error e.loc
-       (Format.asprintf "%a is not a type" AstUtils.string_of_expr e.desc)
+       (Format.asprintf "%a is not a type" AstUtils.print_expr e.desc)
     
 let rec type_of_ast_typ = function
   | Ast.Tbasic (str, loc) -> type_of_string loc str
@@ -106,19 +107,19 @@ let type_of_unop exp op t_exp =
      t, exp.Ast.desc <> Ast.Ecst Cnil
   | Ast.Uaddr, t ->
      if t_exp.is_assignable then TTpointer t, false
-     else type_error exp.loc
-            (Format.asprintf "cannot take the address of %a"
-               AstUtils.string_of_expr exp.desc)
+     else
+       type_error exp.loc
+         (Format.asprintf "cannot take the address of %a" AstUtils.print_expr exp.desc)
   | Udref, TTnil ->
      type_error exp.loc (Format.asprintf "invalid indirect of nil")
   | _, TTuntyped ->
      assert false
-  | (Ast.Unot, (TTint | TTstring | TTnil | TTunit | TTstruct _ | TTtuple _ | TTpointer _))
-  | (Ast.Uneg, (TTstring | TTbool | TTnil | TTunit | TTstruct _ |  TTtuple _ | TTpointer _))
-  | (Ast.Udref, (TTint | TTstring | TTbool | TTunit | TTstruct _ |TTtuple _)) ->
+  | (Ast.Unot, (TTint|TTstring|TTnil|TTunit|TTstruct _|TTtuple _|TTpointer _))
+  | (Ast.Uneg, (TTstring|TTbool|TTnil|TTunit|TTstruct _|TTtuple _|TTpointer _))
+  | (Ast.Udref, (TTint|TTstring|TTbool|TTunit|TTstruct _|TTtuple _)) ->
      type_error exp.loc
        (Format.asprintf "invalid operation: %a %a"
-          AstUtils.string_of_unop op string_of_type t_exp.typ)
+          AstUtils.print_unop op print_type t_exp.typ)
 
 let type_of_binop = function
   | Ast.Badd | Ast.Bsub | Ast.Bmul | Ast.Bdiv | Ast.Bmod -> TTint
@@ -136,12 +137,13 @@ let verify_operand_type op loc term = function
   | Some TTnil, TTnil ->
      type_error loc
        (Format.asprintf "invalid operation: nil %a nil (operator %a not defined on nil)"
-          AstUtils.string_of_binop op AstUtils.string_of_binop op)
+          AstUtils.print_binop op AstUtils.print_binop op)
   | Some exp_typ, typ when typ = exp_typ ->
      typ
   | Some exp_typ, typ ->
-     type_error loc (Format.asprintf "cannot convert %a (type %a) to type %a"
-                       AstUtils.string_of_expr term string_of_type typ string_of_type exp_typ)
+     type_error loc
+       (Format.asprintf "cannot convert %a (type %a) to type %a"
+          AstUtils.print_expr term print_type typ print_type exp_typ)
 
 let tdesc_of_select t_str fd =
   match t_str.typ, t_str.tdesc with
@@ -174,16 +176,16 @@ let multi_texpr_compatible_types ty_ref (te_act:Asg.texpr) f_msg =
      te_act
   | _, TTunit ->
      type_error te_act.loc
-       (Format.asprintf "%a used as value" string_of_texpr te_act)
+       (Format.asprintf "%a used as value" print_texpr te_act)
   | _, TTtuple _ ->
      type_error te_act.loc
-       (Format.asprintf "multiple-value %a in single-value context" string_of_texpr te_act)
+       (Format.asprintf "multiple-value %a in single-value context" print_texpr te_act)
   | TTuntyped, TTnil ->
      type_error te_act.loc (Format.asprintf "use of untyped nil")
   | t_r, t_a ->
      type_error te_act.loc
        (Format.asprintf "cannot use %a (type %a) as type %a in %s"
-          string_of_texpr te_act string_of_type t_a string_of_type t_r f_msg)
+          print_texpr te_act print_type t_a print_type t_r f_msg)
   
 let new_var id b_number ?(loc=Utils.dummy_loc) ty =
   { id; b_number; ty; loc }
@@ -192,9 +194,12 @@ let underscore ty =
   { id = "_"; b_number = 0; ty; loc = Utils.dummy_loc }
 
 (* unique expression `_` *)
-let under_texpr =
-  { tdesc = TEident (underscore TTuntyped); typ = TTuntyped;
-    is_assignable = true; loc = Utils.dummy_loc }
+let under_texpr = {
+    tdesc = TEident (underscore TTuntyped);
+    typ = TTuntyped;
+    is_assignable = true;
+    loc = Utils.dummy_loc
+  }
 
 let rec type_expr env (e:Ast.expr) =
   let tdesc, typ, is_assignable = compute_type env e in
@@ -239,13 +244,13 @@ and compute_type env e =
             with Not_found ->
               type_error fd_loc
                 (Format.asprintf "%a.%s undefined (type %a has no field %s)"
-                   AstUtils.string_of_expr str.desc fd string_of_type t fd)
+                   AstUtils.print_expr str.desc fd print_type t fd)
           in
           tdesc_of_select t_str fd, fd_type, t_str.is_assignable
        | TTint | TTstring | TTbool | TTunit | TTtuple _ | TTpointer _ as t ->
           type_error str.loc
             (Format.asprintf "%a.%s undefined (type %a has no field %s)"
-               AstUtils.string_of_expr str.desc fd string_of_type t fd)
+               AstUtils.print_expr str.desc fd print_type t fd)
        | TTnil ->
           type_error str.loc (Format.sprintf "nil pointer dereference")
        | TTuntyped ->
@@ -258,7 +263,7 @@ and compute_type env e =
          let var = Utils.Smap.find f env in
          type_error e.loc
            (Format.asprintf "cannot call non-function %s (type %a)"
-              f string_of_type var.ty)
+              f print_type var.ty)
        with Not_found ->
          (* check if f has been defined as a function *)
          try
@@ -274,8 +279,8 @@ and compute_type env e =
              | [t] ->
                 TEnew t, TTpointer t, false
              | t :: _ ->
-                type_error e.loc (Format.asprintf "too many arguments to new(%a)"
-                                    string_of_type t)
+                type_error e.loc
+                  (Format.asprintf "too many arguments to new(%a)" print_type t)
            else
              type_error e.loc (Format.sprintf "undefined %s" f)
      end
@@ -299,19 +304,18 @@ and type_expr_list env = function
   | [p] ->
      [ type_expr env p ]
   | _ as pl ->
-     List.map
-       (fun p -> let t_p = type_expr env p in
-                 match t_p.typ with
-                 | TTunit ->
-                    type_error p.loc
-                      (Format.asprintf "%a used as value"
-                         AstUtils.string_of_expr p.desc)
-                 | TTtuple tl ->
-                    type_error p.loc
-                      (Format.asprintf "multiple-value %a in single-value context"
-                         AstUtils.string_of_expr p.desc)
-                 | _ ->
-                    t_p
+     List.map (fun p ->
+         let t_p = type_expr env p in
+         match t_p.typ with
+         | TTunit ->
+            type_error p.loc
+              (Format.asprintf "%a used as value" AstUtils.print_expr p.desc)
+         | TTtuple tl ->
+            type_error p.loc
+              (Format.asprintf "multiple-value %a in single-value context"
+                 AstUtils.print_expr p.desc)
+         | _ ->
+            t_p
        ) pl
     
 (* Checks if the types of the actual params match the expected ones (formal params) *)
@@ -326,17 +330,17 @@ and type_fun_params env f loc formals actuals =
           l
        | TTunit ->
           type_error act.loc
-            (Format.asprintf "%a used as value" AstUtils.string_of_expr act.desc)
+            (Format.asprintf "%a used as value" AstUtils.print_expr act.desc)
        | _ as t ->
           [t]
      in
      let cmp_act_form = compare (List.length ty_actuals) (List.length ty_formals) in
      if cmp_act_form = 0 then begin
-         List.iter2
-           (fun t_f t_a ->
+         List.iter2 (fun t_f t_a ->
              single_texpr_compatible_types t_f t_a act.loc
-               (fun _ -> Format.asprintf "cannot use %a value as type %a in argument to %s"
-                           string_of_type t_a string_of_type t_f f)
+               (fun _ ->
+                 Format.asprintf "cannot use %a value as type %a in argument to %s"
+                   print_type t_a print_type t_f f)
            ) ty_formals ty_actuals;
          match ty_actuals with
          | [t_act] when t_act = TTnil -> (* "unification" of TTnil *)
@@ -347,7 +351,7 @@ and type_fun_params env f loc formals actuals =
        let msg = if cmp_act_form > 0 then "too many" else "not enough" in
        type_error loc
          (Format.asprintf "%s arguments in call to %s\n\t have %a\n\t want %a"
-            msg f string_of_type_list ty_actuals string_of_type_list ty_formals)
+            msg f print_type_l ty_actuals print_type_l ty_formals)
   | _  ->
      let cmp_act_form = compare (List.length actuals) (List.length ty_formals) in
      if cmp_act_form = 0 then begin
@@ -360,9 +364,9 @@ and type_fun_params env f loc formals actuals =
        let msg = if cmp_act_form > 0 then "too many" else "not enough" in
        type_error loc
          (Format.asprintf "%s arguments in call to %s\n\t have %a\n\t want %a"
-            msg f string_of_type_list
+            msg f print_type_l
             (List.map (fun act -> (type_expr env act).typ) actuals)
-            string_of_type_list ty_formals)
+            print_type_l ty_formals)
 
 let type_assigned_values env loc to_be_assigned values =
   let l_assigned = List.length to_be_assigned in
@@ -375,24 +379,21 @@ let type_assigned_values env loc to_be_assigned values =
           vs
        | TTunit ->
           type_error value.loc
-            (Format.asprintf "%a used as value" AstUtils.string_of_expr value.desc)
+            (Format.asprintf "%a used as value" AstUtils.print_expr value.desc)
        | _ as vs ->
           [vs]
      in
      let l_values = List.length t_values in
      if l_assigned = l_values then begin
-         List.iter2
-           (fun te_ass t_v ->
+         List.iter2 (fun te_ass t_v ->
              let f_msg =
                if l_values = 1
                then fun _ ->
                     Format.asprintf "cannot use %a (type %a) as type %a in multiple assignment"
-                      string_of_texpr te_value string_of_type t_v
-                      string_of_type te_ass.typ
+                      print_texpr te_value print_type t_v print_type te_ass.typ
                else fun _ ->
                     Format.asprintf "cannot assign %a to %a (type %a) in multiple assignment"
-                      string_of_type t_v string_of_texpr te_ass
-                      string_of_type te_ass.typ
+                      print_type t_v print_texpr te_ass print_type te_ass.typ
              in
              single_texpr_compatible_types te_ass.typ t_v te_value.loc f_msg
            ) to_be_assigned t_values;
@@ -404,12 +405,11 @@ let type_assigned_values env loc to_be_assigned values =
        end else
        type_error loc
          (Format.asprintf "assignment mismatch: %d variable(s) but %a returns %d value(s)"
-            l_assigned AstUtils.string_of_expr value.desc l_values)
+            l_assigned AstUtils.print_expr value.desc l_values)
   | _  ->
      let l_values = List.length values in
      if l_assigned = l_values then begin
-         List.map2
-           (fun te_ass val_ ->
+         List.map2 (fun te_ass val_ ->
              let te_val = type_expr env val_ in
              multi_texpr_compatible_types te_ass.typ te_val "assignment"
            ) to_be_assigned values 
@@ -452,11 +452,11 @@ let rec type_shstmt env b_vars b_number = function
        match e.desc with
        | Ecst _ | Eident _ | Eselect _ | Eunop _ | Ebinop _ ->
           type_error e.loc
-            (Format.asprintf "%a evaluated but not used"
-               AstUtils.string_of_expr e.desc)
+            (Format.asprintf "%a evaluated but not used" AstUtils.print_expr e.desc)
        | Ecall (f, actuals) ->
           let t_call = type_expr env e in
-          let actuals = match t_call.tdesc with | TEcall (_, act) -> act | _ -> assert false
+          let actuals =
+            match t_call.tdesc with | TEcall (_, act) -> act | _ -> assert false
           in
           b_vars, TScall (f, actuals)
        | Eprint el ->
@@ -476,22 +476,25 @@ let rec type_shstmt env b_vars b_number = function
             | Iincr _ -> TSincr t_e
             | Idecr _ -> TSdecr t_e
             | _ -> assert false
-       else type_error e.loc
-              (Format.asprintf "invalid operation %a%s (non-numeric type %a)"
-                 AstUtils.string_of_expr e.desc string_of_op string_of_type t_e.typ)
-     else type_error e.loc
-            (Format.asprintf "cannot assign to %a" AstUtils.string_of_expr e.desc)
+       else
+         type_error e.loc
+           (Format.asprintf "invalid operation %a%s (non-numeric type %a)"
+              AstUtils.print_expr e.desc string_of_op print_type t_e.typ)
+     else
+       type_error e.loc
+         (Format.asprintf "cannot assign to %a" AstUtils.print_expr e.desc)
   | Ast.Iassign (assigned_s, values) ->
-     let t_assigned_s = List.map (fun ass ->
-                            if ass.Ast.desc = Ast.Eident "_" then under_texpr
-                            else
-                              let t_ass = type_expr env ass in
-                              if not t_ass.is_assignable then
-                                type_error ass.loc
-                                  (Format.asprintf "cannot assign to %a"
-                                     AstUtils.string_of_expr ass.desc);
-                              t_ass
-                          ) assigned_s in
+     let t_assigned_s =
+       List.map (fun ass ->
+           if ass.Ast.desc = Ast.Eident "_" then under_texpr
+           else
+             let t_ass = type_expr env ass in
+             if not t_ass.is_assignable then
+               type_error ass.loc
+                 (Format.asprintf "cannot assign to %a" AstUtils.print_expr ass.desc);
+             t_ass
+         ) assigned_s
+     in
      let loc = try (List.hd values).loc with Failure _ -> assert false in
      let t_values = type_assigned_values env loc t_assigned_s values in
      let t_assigned_s = type_underscores t_assigned_s t_values in
@@ -550,7 +553,7 @@ let rec type_stmt env b_vars b_number = function
      if t_cond.typ <> TTbool then
        type_error cond.loc
          (Format.asprintf "non-bool %a (type %a) used as if condition"
-            AstUtils.string_of_expr cond.desc string_of_type t_cond.typ);
+            AstUtils.print_expr cond.desc print_type t_cond.typ);
      (* branch then *)
      let if_number = next_bnumber () in
      let if_vars, if_stmts = type_block env bif if_number in
@@ -565,7 +568,7 @@ let rec type_stmt env b_vars b_number = function
        | [] -> (* declaration *)
           (* syntax error if unspecified *)
           let typ =
-            match ty with | Some t -> type_of_ast_typ t | None -> assert false
+            match ty with | None -> assert false | Some t -> type_of_ast_typ t 
           in
           let rec update_var_map (var_map:Asg.tvar Utils.smap) t_vars = function
             | [] ->
@@ -577,7 +580,9 @@ let rec type_stmt env b_vars b_number = function
                (* check name unicity *)
                try
                  let previous_decl = Utils.Smap.find id var_map in
-                 let line, fst_char, last_char = Utils.position_of_loc previous_decl.loc in
+                 let line, fst_char, last_char =
+                   Utils.position_of_loc previous_decl.loc
+                 in
                  type_error loc
                    (Format.sprintf
                       "%s redeclared in this block\n\t previous declaration in characters %d-%d at line %d"
@@ -592,12 +597,12 @@ let rec type_stmt env b_vars b_number = function
           b_vars, TSdeclare (t_assigned_s, [])
        | _ -> (* declare-and-assign *)
           let typ =
-            match ty with | Some t -> Some (type_of_ast_typ t) | None -> None
+            match ty with | None -> None | Some t -> Some (type_of_ast_typ t)
           in
           let vars_ph =
             match typ with
-            | Some typ -> List.map (expr_placeholder ~typ) vars
             | None -> List.map expr_placeholder vars
+            | Some typ -> List.map (expr_placeholder ~typ) vars
           in
           let loc = (List.hd values).loc in
           let t_values = type_assigned_values env loc vars_ph values in
@@ -650,7 +655,7 @@ let rec type_stmt env b_vars b_number = function
        if t_cond.typ <> TTbool then
          type_error cond.loc
            (Format.asprintf "non-bool %a (type %a) used as for condition"
-              AstUtils.string_of_expr cond.desc string_of_type t_cond.typ);
+              AstUtils.print_expr cond.desc print_type t_cond.typ);
        (* post statement & body *)
        let for_number = next_bnumber () in
        let for_vars, for_stmts =
@@ -664,7 +669,11 @@ let rec type_stmt env b_vars b_number = function
        b_vars,
        if outer_number = b_number then for_block
        else
-         TSblock { vars = outer_vars; stmts = t_init :: [for_block]; number = outer_number }
+         TSblock {
+             vars = outer_vars;
+             stmts = t_init :: [for_block];
+             number = outer_number
+           }
      end
     
 and type_block env stmts ?ending_stmt number =
@@ -717,7 +726,8 @@ let rec identify_declarations structs functions = function
      end;
      identify_declarations ((name, loc, fields) :: structs) functions decls
     | Ast.Dfunc ((name, loc), args, rtype, body) :: decls ->
-       identify_declarations structs ((name, loc, args, rtype, body) :: functions) decls
+       identify_declarations structs
+         ((name, loc, args, rtype, body) :: functions) decls
 
 let type_fun_sign (name, loc, args, rtype, body) =
   try
@@ -751,9 +761,10 @@ let type_fun_body (name, _, _, _, _) =
   let func = Utils.Smap.find name !func_env in
   block_number := 0;
   let b_number = 0 in
-  let env = List.fold_left (fun env (id, t) ->
-                Utils.Smap.add id (new_var id b_number t) env
-              ) Utils.Smap.empty func.formals
+  let env =
+    List.fold_left (fun env (id, t) ->
+        Utils.Smap.add id (new_var id b_number t) env
+      ) Utils.Smap.empty func.formals
   in
   let body = match func.body with Untyped b -> b | Typed _ -> assert false in
   let vars, stmts = type_block env body b_number in
@@ -849,14 +860,15 @@ let rec scan_tstmt loc env use_queue exp_rtype = function
             | TTtuple tl -> tl
             | _ as t -> [t]
           in
-          let cmp_exp_act = compare (List.length exp_rtype) (List.length act_rtype) in
+          let cmp_exp_act =
+            compare (List.length exp_rtype) (List.length act_rtype)
+          in
           if cmp_exp_act = 0 then begin
-              List.iter2
-                (fun exp act ->
+              List.iter2 (fun exp act ->
                   single_texpr_compatible_types exp act te_act.loc
                     (fun _ ->
                       Format.asprintf "cannot use %a value as type %a in return argument"
-                        string_of_type act string_of_type exp)
+                        print_type act print_type exp)
                 ) exp_rtype act_rtype;
               let env, use_queue = scan_texpr env use_queue te_act in
               env, use_queue, true
@@ -864,22 +876,25 @@ let rec scan_tstmt loc env use_queue exp_rtype = function
             let msg = if cmp_exp_act > 0 then "not enough" else "too many" in
             type_error loc
               (Format.asprintf "%s arguments to return\n\t have %a\n\t want %a"
-                 msg string_of_type_list act_rtype string_of_type_list exp_rtype)
+                 msg print_type_l act_rtype print_type_l exp_rtype)
        | _ ->
-          let cmp_exp_act = compare (List.length exp_rtype) (List.length te_actuals) in
+          let cmp_exp_act =
+            compare (List.length exp_rtype) (List.length te_actuals)
+          in
           if cmp_exp_act = 0 then begin
               let env, use_queue =
                 List.fold_left2 (fun (env, queue) exp te_act ->
                     ignore (multi_texpr_compatible_types exp te_act "return argument");
                     scan_texpr env queue te_act
-                  ) (env, use_queue) exp_rtype te_actuals in
+                  ) (env, use_queue) exp_rtype te_actuals
+              in
               env, use_queue, true
             end else
             let msg = if cmp_exp_act > 0 then "not enough" else "too many" in
             type_error loc
               (Format.asprintf "%s arguments to return\n\t have %a\n\t want %a"
-                 msg string_of_type_list (List.map (fun te -> te.typ) te_actuals)
-                 string_of_type_list exp_rtype)
+                 msg print_type_l (List.map (fun te -> te.typ) te_actuals)
+                 print_type_l exp_rtype)
      end
   | TSfor (cond, body) ->
      let sure_entry = cond.tdesc = TEbool true in
@@ -891,7 +906,8 @@ and scan_block loc env use_queue rtype block =
   let b_env, b_queue, final =
     List.fold_left (fun (env, use_queue, _) st ->
         scan_tstmt loc env use_queue rtype st
-      ) (Utils.Smap.empty, [], false) block.stmts in
+      ) (Utils.Smap.empty, [], false) block.stmts
+  in
   Utils.Smap.iter (fun id (occ, loc) ->
       if occ = 0 then type_error loc (Format.sprintf "%s declared and not used" id)
     ) b_env;
@@ -913,21 +929,21 @@ let check_fun_return fun_env =
       | _ as t -> [t]
     in
     let env, _, final = scan_block loc env [] exp_rtype block in
-    if not final && exp_rtype <> [] then type_error loc "missing return at end of function"
+    if not final && exp_rtype <> []
+    then type_error loc "missing return at end of function"
   in
   Utils.Smap.iter check_one_function fun_env
 
 let check_recursive_struct struct_env =
   let check_one_struct root ({ fields; loc } as str) =
     let rec dfs_scan curr_struct =
-      List.iter
-        (function
-         | _, TTstruct curr when curr = root -> 
-            type_error loc  (Format.asprintf "invalid recursive type %s" root)
-         | _, TTstruct curr ->
-            dfs_scan (Utils.Smap.find curr struct_env)
-         | _ ->
-            ()
+      List.iter (function
+          | _, TTstruct curr when curr = root -> 
+             type_error loc  (Format.asprintf "invalid recursive type %s" root)
+          | _, TTstruct curr ->
+             dfs_scan (Utils.Smap.find curr struct_env)
+          | _ ->
+             ()
         ) curr_struct.fields
     in dfs_scan str 
   in
@@ -955,4 +971,4 @@ let programme file =
   check_fun_main functions;
   if !import_fmt <> !used_fmt then
     type_error import_loc "imported and not used: \"fmt\"";
-  { structs = !struct_env; functions = !func_env }            
+  { structs = !struct_env; functions = !func_env }

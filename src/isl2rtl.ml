@@ -65,16 +65,21 @@ let rec expr destrs e destl =
      generate (Imalloc (List.hd destrs, n, destl))
   | Isl.IEaccess v when v = "_" ->
      let rxs = multi_fresh_int e.length in
-     List.fold_right2 (fun src dst l -> generate (Imbinop (Mmov, src, dst, l))) rxs destrs destl
+     List.fold_right2 (fun src dst l ->
+         generate (Imbinop (Mmov, src, dst, l))
+       ) rxs destrs destl
   | Isl.IEaccess v ->
      let rxs = Hashtbl.find locals v in
-     List.fold_right2 (fun src dst l -> generate (Imbinop (Mmov, src, dst, l))) rxs destrs destl
+     List.fold_right2 (fun src dst l ->
+         generate (Imbinop (Mmov, src, dst, l))
+       ) rxs destrs destl
   | Isl.IEselect (str, n) ->
      let tmps = multi_fresh_int str.length in
      let srcs = Utils.sub_list tmps n e.length in
-     let l = List.fold_left2 (fun l src dst ->
-                 generate (Imbinop (Mmov, src, dst, l))
-               ) destl srcs destrs
+     let l =
+       List.fold_left2 (fun l src dst ->
+           generate (Imbinop (Mmov, src, dst, l))
+         ) destl srcs destrs
      in
      expr tmps str l
   | Isl.IEload (str, n) ->
@@ -93,10 +98,9 @@ let rec expr destrs e destl =
      let r_args = List.map multi_fresh_int n_formals in
      let f_args = List.flatten r_args in
      let lab = generate (Icall (destrs, f, f_args, destl)) in
-     if List.length actuals < Utils.sum_of_list n_formals then (* actuals is a single function call *)
-      expr f_args (List.hd actuals) lab
-     else (* one actual parameter per formal one *)
-       List.fold_right2 expr r_args actuals lab
+     if List.length actuals < Utils.sum_of_list n_formals
+     then expr f_args (List.hd actuals) lab  (* actuals is a single function call *)
+     else List.fold_right2 expr r_args actuals lab (* one actual parameter per formal one *)
   | Isl.IEaddr { length; desc = IEaccess v } ->
      let rxs = Hashtbl.find locals v in
      generate (Ilea_local (rxs, 0, List.hd destrs, destl))
@@ -120,9 +124,10 @@ let rec expr destrs e destl =
      let true_l = generate (Ibool (true, dst, destl)) in 
      let false_l = generate (Ibool (false, dst, destl)) in
      let cont, break = if op = Msete then true_l, false_l else false_l, true_l in
-     let l = List.fold_right2 (fun r1 r2 cont -> 
-                 generate (Imbbranch (Mjne, r2, r1, break, cont))
-               ) tmps1 tmps2 cont
+     let l =
+       List.fold_right2 (fun r1 r2 cont -> 
+           generate (Imbbranch (Mjne, r2, r1, break, cont))
+         ) tmps1 tmps2 cont
      in
      expr tmps1 e1 (expr tmps2 e2 l)
   | Isl.IEbinop (op, e1, e2) ->
@@ -169,9 +174,10 @@ and condition e true_l false_l =
      let tmps1 = multi_fresh_int e1.length in
      let tmps2 = multi_fresh_int e2.length in
      let cont, break = if op = Msete then  true_l, false_l else false_l, true_l in
-     let l = List.fold_right2 (fun r1 r2 cont -> 
-                 generate (Imbbranch (Mje, r2, r1, cont, break))
-               ) tmps1 tmps2 cont
+     let l =
+       List.fold_right2 (fun r1 r2 cont -> 
+           generate (Imbbranch (Mje, r2, r1, cont, break))
+         ) tmps1 tmps2 cont
      in
      expr tmps1 e1 (expr tmps2 e2 l)
   | Isl.IEbinop (Msetg | Msetge | Msetl | Msetle as op, e1, e2) ->
@@ -190,10 +196,14 @@ let assign srcrs e destl =
   match e.Isl.assignee with
   | Isl.Avar v when v = "_" ->
      let dstrs = multi_fresh_int e.length in
-     List.fold_right2 (fun src dst l -> generate (Imbinop (Mmov, src, dst, l))) srcrs dstrs destl
+     List.fold_right2 (fun src dst l ->
+         generate (Imbinop (Mmov, src, dst, l))
+       ) srcrs dstrs destl
   | Isl.Avar v ->
      let dstrs = Hashtbl.find locals v in
-     List.fold_right2 (fun src dst l -> generate (Imbinop (Mmov, src, dst, l))) srcrs dstrs destl
+     List.fold_right2 (fun src dst l ->
+         generate (Imbinop (Mmov, src, dst, l))
+       ) srcrs dstrs destl
   | Isl.Afield_var (v, n) ->
      let tmps = Hashtbl.find locals v in
      let dstrs = Utils.sub_list tmps n e.length in
@@ -203,16 +213,18 @@ let assign srcrs e destl =
   | Isl.Afield (str, n) ->
      let tmps = multi_fresh_int str.length in
      let dstrs = Utils.sub_list tmps n e.length in
-     let l = List.fold_left2 (fun l src dst ->
-                 generate (Imbinop (Mmov, src, dst, l))
-               ) destl srcrs dstrs
+     let l =
+       List.fold_left2 (fun l src dst ->
+           generate (Imbinop (Mmov, src, dst, l))
+         ) destl srcrs dstrs
      in
      expr tmps str l
   | Isl.Adref (e, n) ->
      let dstr = Register.fresh () in
-     let l, _ = List.fold_left (fun (l, n) srcr ->
-                 generate (Istore (srcr, dstr, n, l)), n + Utils.word_size
-               ) (destl, n) srcrs
+     let l, _ =
+       List.fold_left (fun (l, n) srcr ->
+           generate (Istore (srcr, dstr, n, l)), n + Utils.word_size
+         ) (destl, n) srcrs
      in 
      expr [dstr] e l
 
@@ -315,9 +327,14 @@ and tr_print_struct generate lab str regs =
   let print_str = ".print_" ^ str in
   if not (Hashtbl.mem print_functions print_str) then begin
       let graph = ref Label.M.empty in
-      let fun_ph =
-        { formals = multi_fresh_list regs; result = []; locals = Register.S.empty;
-          entry = Label.fresh (); exit_ = Label.fresh (); body = !graph }
+      let fun_ph = {
+          formals = multi_fresh_list regs;
+          result = [];
+          locals = Register.S.empty;
+          entry = Label.fresh ();
+          exit_ = Label.fresh ();
+          body = !graph
+        }
       in
       let generate i =
         let l = Label.fresh () in
@@ -352,6 +369,7 @@ let rec stmt retrs s exitl destl =
        | IEunop (Minc|Mdec as op, { length; desc = IEaccess v }) ->
           let rxs = Hashtbl.find locals v in
           generate (Imunop (op, List.hd rxs, destl))
+       (* TODO *)
        (* | IEunop (Minc|Mdec as op, { length; desc = IEselect (str, n) }) ->
         *    let rxs = multi_fresh_int str.length in
         *    expr rxs str (generate (
@@ -365,10 +383,10 @@ let rec stmt retrs s exitl destl =
      end
   | Isl.IScall (f, actuals) ->
      let _, l_results = Hashtbl.find number_formals_results f in
-     let n_results = Utils.sum_of_list l_results in
-     let destrs = multi_fresh_int n_results in
+     let length = Utils.sum_of_list l_results in
+     let destrs = multi_fresh_int length in
      (* the type is unused in `expr` so TTuntyped should suffice *)
-     expr destrs { length = n_results; desc = IEcall (f, actuals); typ = TTuntyped } destl
+     expr destrs { length; desc = IEcall (f, actuals); typ = TTuntyped } destl
   | Isl.ISprint es ->
      let destrs = List.map (fun (e:Isl.iexpr) -> multi_fresh_int e.length) es in
      let types =
@@ -410,7 +428,7 @@ and block retrs b exitl destl =
   
 let funct (f:Isl.ifundef) =
   let r_formals = List.map (fun (_, n) -> multi_fresh_int n) f.formals in
-  List.iter2 (fun (v, _) rs -> Hashtbl.add locals v rs) f.formals r_formals; 
+  List.iter2 (fun (v, _) rs -> Hashtbl.add locals v rs) f.formals r_formals;
   let result = List.map (fun len -> multi_fresh_int len) f.result in
   let local_vars =
     List.fold_left (fun set (v, n) ->
@@ -424,8 +442,12 @@ let funct (f:Isl.ifundef) =
   let body = !graph in
   Hashtbl.reset locals;
   graph := Label.M.empty;
-  { formals = List.flatten r_formals; result = List.flatten result;
-    locals = local_vars; entry; exit_; body } 
+  {
+    formals = List.flatten r_formals;
+    result = List.flatten result;
+    locals = local_vars;
+    entry; exit_; body
+  } 
   
 let programme (p:Isl.iprogramme) =
   let add_retrs f (def:Isl.ifundef) =
@@ -434,5 +456,7 @@ let programme (p:Isl.iprogramme) =
   struct_env := p.structs;
   Utils.Smap.iter add_retrs p.functions;
   let functions = Utils.Smap.map funct p.functions in
-  let functions = Hashtbl.fold Utils.Smap.add print_functions functions in
-  { structs = p.structs; functions }
+  {
+    structs = p.structs;
+    functions = Hashtbl.fold Utils.Smap.add print_functions functions
+  }

@@ -48,22 +48,21 @@ let check_int n_str loc =
 let check_neg_int e =
   match e.desc with
   | Eunop (Uneg, arg) ->
-     begin
-       match arg.desc with
-       | Ecst (Cint n) -> check_int_size n e.loc; { arg with loc = e.loc }
-       | Eunop (Uneg, e) -> e
-       | _ -> e
+     begin match arg.desc with
+     | Ecst (Cint n) -> check_int_size n e.loc; { arg with loc = e.loc }
+     | Eunop (Uneg, e) -> e
+     | _ -> e
      end
   | _ ->
      assert false
 
-let string_of_unop fmt = function
+let print_unop fmt = function
   | Unot -> Format.fprintf fmt "!"
   | Uneg -> Format.fprintf fmt "-"
   | Udref -> Format.fprintf fmt "*"
   | Uaddr -> Format.fprintf fmt "&"
 
-let string_of_binop fmt = function
+let print_binop fmt = function
   | Badd -> Format.fprintf fmt "+"
   | Bsub -> Format.fprintf fmt "-"
   | Bmul -> Format.fprintf fmt "*"
@@ -78,34 +77,38 @@ let string_of_binop fmt = function
   | Band -> Format.fprintf fmt "&&"
   | Bor -> Format.fprintf fmt "||"
 									  
-let string_of_constant fmt = function
+let print_constant fmt = function
   | Cint n -> Format.fprintf fmt "%s" (Big_int_Z.string_of_big_int n)
   | Cstring str -> Format.fprintf fmt "\"%s\"" str
   | Cbool b -> Format.fprintf fmt (if b then "true" else "false")
   | Cnil -> Format.fprintf fmt "nil"
   
-let rec string_of_expr fmt = function
+let rec print_expr fmt = function
   | Ecst cst ->
-     Format.fprintf fmt "%a" string_of_constant cst
+     Format.fprintf fmt "%a" print_constant cst
   | Eident id ->
      Format.fprintf fmt "%s" id
-  | Eselect (exp, (field, _)) ->
-     Format.fprintf fmt "%a.%s" string_of_expr exp.desc field
-  | Ecall (f, args) ->
+  | Eselect (e, (field, _)) ->
+     Format.fprintf fmt "%a.%s" print_expr e.desc field
+  | Ecall (f, []) ->
      Format.fprintf fmt "%s()" f 
-  | Eprint _ ->
+  | Ecall (f, _) ->
+     Format.fprintf fmt "%s(...)" f 
+  | Eprint [] ->
      Format.fprintf fmt "fmt.Print()"
-  | Eunop (op, expr) ->
-     Format.fprintf fmt "%a(%a)" string_of_unop op string_of_expr expr.desc
+  | Eprint _ ->
+     Format.fprintf fmt "fmt.Print(...)"
+  | Eunop (op, e) ->
+     Format.fprintf fmt "%a(%a)" print_unop op print_expr e.desc
   | Ebinop (op, l, r) ->
      Format.fprintf fmt "@[(%a %a@ %a)@]"
-       string_of_expr l.desc string_of_binop op string_of_expr r.desc
+       print_expr l.desc print_binop op print_expr r.desc
 
 let get_ident e =
   match e.desc with
   | Eident id ->
      id, e.loc
-  | _ as exp ->
+  | _ as expr ->
      syntax_error e.loc
        (Format.asprintf "unexpected expression %s%s%a%s%s, expecting string"
-		  Utils.invert Utils.yellow string_of_expr exp Utils.close Utils.close)
+	  Utils.invert Utils.yellow print_expr expr Utils.close Utils.close)

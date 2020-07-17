@@ -34,4 +34,4 @@ val callee_saved : t list
 val caller_saved : t list
 val allocable : set  (* working registers *)
 
-val string_of_reg : Format.formatter -> t -> unit
+val print : Format.formatter -> t -> unit

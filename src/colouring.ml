@@ -27,7 +27,7 @@ exception Found_spilt of int
 exception No_possible_colour
 
 let print_colour fmt = function
-  | Reg mr -> Format.fprintf fmt "reg %a" Register.string_of_reg mr
+  | Reg mr -> Format.fprintf fmt "reg %a" Register.print mr
   | Spilt n -> Format.fprintf fmt "spilt %d" n
   | Heap (s, h) -> Format.fprintf fmt "heap s:%d, h:%d" s h
                
@@ -63,13 +63,13 @@ let reduce_spilt spilt colouring graph heap_map =
   in
 
   let min_degree_node graph =
-    Register.M.fold (fun v _ m_n ->
+    Register.M.fold (fun v _ min_n ->
         let arcs = Register.M.find v graph in
         let deg = Register.S.cardinal arcs.intfs in
-        match m_n with
+        match min_n with
         | None -> Some (v, arcs, deg)
-        | Some (_, _, d) when deg < d -> Some (v, arcs, deg)
-        | m_s -> m_s
+        | Some (_, _, min_deg) when deg < min_deg -> Some (v, arcs, deg)
+        | _ -> min_n
       ) graph None
   in
 
@@ -101,8 +101,8 @@ let reduce_spilt spilt colouring graph heap_map =
     while not (Register.M.is_empty !curr_g) do
       let min_node, neighs =
         match min_degree_node !curr_g with
-        | Some (v, arcs, _) -> v, arcs
         | None -> assert false
+        | Some (v, arcs, _) -> v, arcs
       in
       curr_g := Interference.remove_node min_node neighs !curr_g;
       Stack.push min_node to_colour
@@ -173,10 +173,7 @@ let alloc_registers mach_regs heap_regs graph =
   
   let usage_counter =
     let incr_counter v map =
-      let c =
-        try Register.M.find v map
-        with Not_found -> 0
-      in
+      let c = try Register.M.find v map with Not_found -> 0 in
       Register.M.add v (c+1) map
     in
     Register.M.fold (fun v arcs u_c ->
@@ -206,8 +203,8 @@ let alloc_registers mach_regs heap_regs graph =
               in
               match min_n with
               | None -> Some (v, cost)
-              | Some (_, c) when cost < c -> Some (v, cost)
-              | m_n -> m_n
+              | Some (_, min_cost) when cost < min_cost -> Some (v, cost)
+              | _ -> min_n
             end
         ) graph None
     in
@@ -230,7 +227,7 @@ let alloc_registers mach_regs heap_regs graph =
     in
     try 
       let v_c = Register.S.choose avail_colours in
-      (* Format.printf "Coloured %a with %a\n" Register.string_of_reg v Register.string_of_reg  v_c; *)
+      (* Format.printf "Coloured %a with %a\n" Register.print v Register.print v_c; *)
       Register.M.add v (Reg v_c) colours
     with Not_found ->
       raise No_possible_colour
@@ -265,8 +262,8 @@ let alloc_registers mach_regs heap_regs graph =
             if deg >= k then min_n
             else match min_n with
                  | None -> Some (v, deg)
-                 | Some (s, d) when deg < d -> Some (v, deg)
-                 | m_n -> m_n
+                 | Some (s, min_deg) when deg < min_deg -> Some (v, deg)
+                 | _ -> min_n
           end
       ) graph None
   in
@@ -290,7 +287,7 @@ let alloc_registers mach_regs heap_regs graph =
       | Select v ->
          begin
            (* Format.printf "Action #2: select\n";
-            * Format.printf "Deleted register %a\n" Register.string_of_reg v; *)
+            * Format.printf "Deleted register %a\n" Register.print v; *)
            let arcs = Register.M.find v !curr_g in
            Stack.push (Colour_node (v, arcs)) stack;
            curr_g := Interference.remove_node v arcs !curr_g;
@@ -305,7 +302,7 @@ let alloc_registers mach_regs heap_regs graph =
              Stack.push Freeze stack
            with Good_pref_arc (v1, v2) ->
              (* Format.printf "Merged register %a into register %a\n"
-              *   Register.string_of_reg v1 Register.string_of_reg v2; *)
+              *   Register.print v1 Register.print v2; *)
              curr_g := Interference.merge_nodes v1 v2 !curr_g;
              decr number_of_regs;
              Stack.push (Copy_colour (v2, v1)) stack;
@@ -321,7 +318,7 @@ let alloc_registers mach_regs heap_regs graph =
                ) !curr_g;
              Stack.push Spill stack
            with Found_node (v, arcs) ->
-             (* Format.printf "Froze register %a\n" Register.string_of_reg v; *)
+             (* Format.printf "Froze register %a\n" Register.print v; *)
              curr_g := Register.S.fold (Interference.remove_pref_arc v) arcs.prefs !curr_g;
              curr_g := Register.M.add v { arcs with prefs = Register.S.empty } !curr_g;
              Stack.push Simplify stack
@@ -329,27 +326,27 @@ let alloc_registers mach_regs heap_regs graph =
       | Spill ->
          begin
            (* Format.printf "Action #5: spill\n"; *)
-           if !number_of_regs > k then (* g is "empty" iff there remain only machine registers in it *)
+           if !number_of_regs > k then (* g is "empty" iff it contains only machine registers *)
              let v = min_cost_node !curr_g in
              Stack.push (Select v) stack
          end
       | Colour_node (v, arcs) ->
          begin
-           (* Format.printf "Action #6: colour node %a\n" Register.string_of_reg v; *)
+           (* Format.printf "Action #6: colour node %a\n" Register.print v; *)
            try
              if not (Register.M.mem v !curr_c) then curr_c := colour_node !curr_c v arcs
            with No_possible_colour ->
-             (* Format.printf "Spilt register %a\n" Register.string_of_reg v; *)
+             (* Format.printf "Spilt register %a\n" Register.print v; *)
              spilt := Register.S.add v !spilt
          end
       | Copy_colour (col, uncol) ->
          (* Format.printf "Action #7: copy colour\n"; *)
          try
            let c = Register.M.find col !curr_c in
-           (* Format.printf "Coloured %a with %a\n" Register.string_of_reg uncol print_colour c; *)
+           (* Format.printf "Coloured %a with %a\n" Register.print uncol print_colour c; *)
            curr_c := Register.M.add uncol c !curr_c
          with Not_found ->
-           (* Format.printf "Spilt register %a\n" Register.string_of_reg uncol; *)
+           (* Format.printf "Spilt register %a\n" Register.print uncol; *)
            spilt := Register.S.add uncol !spilt
     done;
     !spilt, !curr_c

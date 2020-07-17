@@ -63,15 +63,14 @@ let remove_node v arcs graph =
   in
   Register.M.remove v graph
 
-(** [merge_nodes v1 v2 g] merges v1 into v2, which must be linked by a preference edge **)
+(** [merge_nodes v1 v2 g] merges v1 into v2, which must be linked through a preference edge **)
 let merge_nodes v1 v2 graph =
   let graph = remove_pref_arc v1 v2 graph in
   let v2_arcs = Register.M.find v2 graph in
   let v1_arcs = Register.M.find v1 graph in
   let v1_arcs = { v1_arcs with prefs = Register.S.remove v2 v1_arcs.prefs } in
   let graph =
-    Register.S.fold (
-        fun w g -> (* add only non-conflicting preference arcs *)
+    Register.S.fold (fun w g -> (* add only non-conflicting preference arcs *)
         if Register.S.mem w v2_arcs.intfs then remove_pref_arc v1 w g
         else
           let g = replace_pref_arc v1 v2 w g in
@@ -79,9 +78,10 @@ let merge_nodes v1 v2 graph =
       ) v1_arcs.prefs graph
   in
   let graph =
-    Register.S.fold (
-        fun w g ->
-        let g = if Register.S.mem w v2_arcs.prefs then remove_pref_edge v2 w g else g in
+    Register.S.fold (fun w g ->
+        let g =
+          if Register.S.mem w v2_arcs.prefs then remove_pref_edge v2 w g else g
+        in
         let g = replace_intf_arc v1 v2 w g in
         add_intf_arc w v2 g
       ) v1_arcs.intfs graph
@@ -126,8 +126,7 @@ let build_graph info_map =
        let out_live = Register.S.remove v info.out_ in
        Register.S.fold (add_intf_edge v) (Register.S.remove w out_live) graph
     | _ ->
-       Register.S.fold (
-           fun v g ->
+       Register.S.fold (fun v g ->
            Register.S.fold (add_intf_edge v) (Register.S.remove v info.out_) g
          ) info.def graph
   in

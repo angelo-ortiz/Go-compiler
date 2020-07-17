@@ -25,7 +25,7 @@ type linstr =
 
 type frame = {
     f_params : int; (* size of return address *)
-    f_locals : int; (* size of local variables + used calle-saved Register.ts *)
+    f_locals : int; (* size of local variables + used calle-saved registers *)
   }
 
 type lfundef = {

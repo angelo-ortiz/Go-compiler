@@ -68,7 +68,7 @@ let register r =
   else if r = Register.r15 then X86_64.r15
   else assert false
 
-let low_byte_reg r =
+ let low_byte_reg r =
   if r = Register.rax then X86_64.al
   else if r = Register.rbx then X86_64.bl
   else if r = Register.rcx then X86_64.cl
@@ -163,10 +163,10 @@ let bset op c1 c2 =
     | Ertl.Msetle -> X86_64.setle
     | _ -> assert false
   in
-  X86_64.cmpq    c1 c2 ++
-  x_set          b_tmp1 ++
-  X86_64.movzbq  b_tmp1 (register Register.tmp1) ++
-  X86_64.movq    q_tmp1 c2
+  X86_64.cmpq       c1 c2
+  ++ x_set          b_tmp1
+  ++ X86_64.movzbq  b_tmp1 (register Register.tmp1)
+  ++ X86_64.movq    q_tmp1 c2
   
 let rec lin graph l =
   if not (Hashtbl.mem visited l) then begin
@@ -180,10 +180,9 @@ let rec lin graph l =
 and instr graph l = function
   | Iint (n, r, next_l) ->
      let op_r = operand r in
-     begin
-       match r with
-       | Reg mr when n = 0L -> emit l (X86_64.xorq op_r op_r)
-       | _ -> emit l (X86_64.movq (X86_64.imm64 n) (operand r))
+     begin match r with
+     | Reg mr when n = 0L -> emit l (X86_64.xorq op_r op_r)
+     | _ -> emit l (X86_64.movq (X86_64.imm64 n) (operand r))
      end;
      lin graph next_l
   | Istring (s, r, next_l) ->
@@ -250,8 +249,7 @@ and instr graph l = function
      emit l (X86_64.cqto ++ X86_64.idivq (operand c));
      lin graph next_l
   | Iinc_dec (op, r, ofs, next_l) ->
-     let inc_dec = match op with Rtl.IDinc -> X86_64.incq | Rtl.IDdec -> X86_64.decq
-     in
+     let inc_dec = match op with Rtl.IDinc -> X86_64.incq | Rtl.IDdec -> X86_64.decq in
      emit l (inc_dec (ind ~reg:r ofs));
      lin graph next_l
   | Imbinop (op, c1, c2, next_l) ->

@@ -9,4 +9,4 @@ type 'a map = 'a M.t
 
 val fresh : unit -> t
 val to_string : t -> string
-val string_of_label : Format.formatter -> t -> unit
+val print : Format.formatter -> t -> unit

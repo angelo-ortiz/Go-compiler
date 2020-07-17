@@ -47,9 +47,9 @@ let field_offset str fd =
   let str = Utils.Smap.find str !struct_env in
   try
     let _ = 
-      List.fold_left
-        (fun ofs (fd', ty) ->
-          if fd' = fd then raise (Found_offset ofs); ofs + length_of_type ty) 0 str.fields
+      List.fold_left (fun ofs (fd', ty) ->
+          if fd' = fd then raise (Found_offset ofs); ofs + length_of_type ty
+        ) 0 str.fields
     in assert false
   with Found_offset ofs -> ofs
      
@@ -102,12 +102,9 @@ let rec mk_add e1 e2 =
     
 let rec mk_neg e =
   match e.desc with
-  | IEint n ->
-     IEint (Int64.neg n)
-  | IEunop (Maddi n, e) ->
-     IEunop (Maddi (Int64.neg n), expr_of_prim (mk_neg e) true)
-  | _ ->
-     IEunop (Mneg, e)
+  | IEint n -> IEint (Int64.neg n)
+  | IEunop (Maddi n, e) -> IEunop (Maddi (Int64.neg n), expr_of_prim (mk_neg e) true)
+  | _ -> IEunop (Mneg, e)
     
 and mk_sub e1 e2 =
   match e1.desc, e2.desc with
@@ -149,7 +146,7 @@ let rec mk_mul e1 e2 =
 
 let rec mk_div e1 e2 =
   match e1.desc, e2.desc with
-  | IEint n1, IEint n2 when n2 = 0L -> (* it will be a running-time error *)
+  | IEint n1, IEint n2 when n2 = 0L -> (* it will be a runtime error *)
      IEunop (Midivil n2, e1)
   | IEint n1, IEint n2 ->
      IEint (Int64.div n1 n2)
@@ -166,7 +163,7 @@ let rec mk_div e1 e2 =
 
 let rec mk_mod e1 e2 =
   match e1.desc, e2.desc with
-  | IEint n1, IEint n2 when n2 = 0L -> (* it will be a running-time error *)
+  | IEint n1, IEint n2 when n2 = 0L -> (* it will be a runtime error *)
      IEunop (Mmodil n2, e1)
   | IEint n1, IEint n2 ->
      IEint (Int64.rem n1 n2)
@@ -296,10 +293,9 @@ let assign_desc = function
   | IEaccess v ->
      Avar v
   | IEselect (str, fd) ->
-     begin
-       match str.desc with
-       | IEaccess v -> Afield_var (v, fd)
-       | _ -> Afield (str, fd)
+     begin match str.desc with
+     | IEaccess v -> Afield_var (v, fd)
+     | _ -> Afield (str, fd)
      end
   | IEload (str, n) ->
      Adref (str, n)
@@ -317,7 +313,7 @@ let rec stmt locals body = function
      locals, body
   | TScall (f, actuals) ->
      locals, IScall (f, List.map expr actuals) :: body
-  | TSprint es when es = [] -> (* no expressions to print *)
+  | TSprint es when es = [] -> (* skip when no expressions to print *)
      locals, body
   | TSprint es ->
      locals, ISprint (List.map expr es) :: body
@@ -349,25 +345,26 @@ let rec stmt locals body = function
          let body =
            ISassign (
                List.map (fun v ->
-                   let length = length_of_type v.ty in
-                   let id = if v.id = "_" then "_"
-                            else begin
-                                let id' = prepend_bnumber v in
-                                to_default := begin match !rem_values with 
-                                              | val_ :: vals ->
-                                                 rem_values := vals;
-                                                 begin match val_.tdesc with
-                                                 | TEnew ty -> (id', ty) :: !to_default
-                                                 | _ -> !to_default
-                                                 end;
-                                              | [] ->
-                                                 !to_default
-                                              end;
-                                id'
+                   let id =
+                     if v.id = "_" then "_"
+                     else begin
+                         let id' = prepend_bnumber v in
+                         to_default :=
+                           begin match !rem_values with 
+                           | val_ :: vals ->
+                              begin
+                                rem_values := vals;
+                                match val_.tdesc with
+                                | TEnew ty -> (id', ty) :: !to_default
+                                | _ -> !to_default
                               end
+                           | [] ->
+                              !to_default
+                           end;
+                         id'
+                       end
                    in
-                   let assignee = Avar id in
-                   { length; assignee }
+                   { length = length_of_type v.ty; assignee = Avar id }
                  ) vars,
                List.map expr values
              ) :: body
@@ -386,9 +383,10 @@ let rec stmt locals body = function
      locals, ISfor (expr cond, List.rev b_for) :: body
     
 and block locals body b =
-  let locals = Utils.Smap.fold (fun id tvar vs ->
-                   (prepend_bnumber tvar, length_of_type tvar.ty) :: vs
-                 ) b.vars locals
+  let locals =
+    Utils.Smap.fold (fun id tvar vs ->
+        (prepend_bnumber tvar, length_of_type tvar.ty) :: vs
+      ) b.vars locals
   in
   let locals, body =
     List.fold_left (fun (vs, st_s) st -> stmt vs st_s st) (locals, body) b.stmts
@@ -397,20 +395,23 @@ and block locals body b =
 
 let funct (f:Asg.tfundef) =
   let result_length = function
-    | TTunit ->
-       []
-    | TTtuple tl ->
-       List.map length_of_type tl
-    | _ as t ->
-       [ length_of_type t ]
+    | TTunit -> []
+    | TTtuple tl -> List.map length_of_type tl
+    | _ as t -> [ length_of_type t ]
   in
-  (* local vars at block 0 cannot have the same name as a formal parameter *)
-  let formals = List.map (fun (id, ty) -> "0_" ^ id, length_of_type ty) f.formals in
-  let locals, body = block [] [] (match f.body with | Typed b -> b | Untyped _ -> assert false)
+  let locals, body =
+    block [] [] (match f.body with | Typed b -> b | Untyped _ -> assert false)
   in
-  { formals; result = result_length f.rtype; locals = List.rev locals; body = List.rev body }
+  { (* local vars at block 0 cannot have the same name as a formal parameter *)
+    formals = List.map (fun (id, ty) -> "0_" ^ id, length_of_type ty) f.formals;
+    result = result_length f.rtype;
+    locals = List.rev locals;
+    body = List.rev body
+  }
   
 let programme (p:Asg.tprogramme) =
   struct_env := p.structs;
-  { structs = Utils.Smap.map (fun str -> str.fields) p.structs;
-    functions = Utils.Smap.map funct p.functions }
+  {
+    structs = Utils.Smap.map (fun str -> str.fields) p.structs;
+    functions = Utils.Smap.map funct p.functions
+  }

@@ -5,9 +5,7 @@ open UnionFind
 let compress entry graph =
 
   let elements =
-    Label.M.mapi (fun l _ ->
-        UnionFind.fresh l
-      ) graph
+    Label.M.mapi (fun l _ -> UnionFind.fresh l) graph
   in
   
   let lookup l =

@@ -8,7 +8,7 @@ val check_package : Ast.expr -> string -> Utils.loc -> unit
 val check_int : string -> Utils.loc -> Big_int_Z.big_int
 val check_neg_int : Ast.expr -> Ast.expr
 val get_ident : Ast.expr -> Ast.ident
-val string_of_unop : Format.formatter -> Ast.unop -> unit
-val string_of_binop : Format.formatter -> Ast.binop -> unit
-val string_of_constant : Format.formatter -> Ast.constant -> unit
-val string_of_expr : Format.formatter -> Ast.desc -> unit
+val print_unop : Format.formatter -> Ast.unop -> unit
+val print_binop : Format.formatter -> Ast.binop -> unit
+val print_constant : Format.formatter -> Ast.constant -> unit
+val print_expr : Format.formatter -> Ast.desc -> unit

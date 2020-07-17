@@ -23,7 +23,6 @@ type einstr =
   | Imunop of emunop * Register.t * Label.t
   | Iidiv_imm of int64 * Label.t
   | Iidiv of Register.t * Label.t
-  (* | Iinc_dec_local of Rtl.inc_dec * Register.t list * int * Label.t (\* local Register.t | offset *\) *)
   | Iinc_dec of Rtl.inc_dec * Register.t * int * Label.t (* src | offset *)
   | Imbinop of embinop * Register.t * Register.t * Label.t
   | Imubranch of Rtl.mubranch * Register.t * Label.t * Label.t (* true | false *)

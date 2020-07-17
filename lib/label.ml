@@ -16,5 +16,5 @@ let fresh () =
 let to_string l =
   l
 
-let string_of_label fmt l =
+let print fmt l =
   Format.fprintf fmt "%s" l

@@ -64,18 +64,17 @@ let instr colours frame = function
      read2 colours src dst (
          fun src_mr dst_mr -> Istore (src_mr, dst_mr, ofs, l)
        )
-  | Ertl.Icall (f, n_args, l) ->
+  | Ertl.Icall (f, _, l) ->
      Icall (f, l)
   | Ertl.Imunop (op, r, l) ->
-     begin
-       match op, lookup colours r with
-       | Mimuli _, (Spilt _ as reg) ->
-          read1 colours r (fun mr ->
-              Imunop (op, Reg mr, generate (
-              Imbinop (Mmov, Reg mr, reg, l)))
-            )
-       | _, reg ->
-          Imunop (op, reg, l)
+     begin match op, lookup colours r with
+     | Mimuli _, (Spilt _ as reg) ->
+        read1 colours r (fun mr ->
+            Imunop (op, Reg mr, generate (
+            Imbinop (Mmov, Reg mr, reg, l)))
+          )
+     | _, reg ->
+        Imunop (op, reg, l)
      end
   | Ertl.Iidiv_imm (n, l) ->
      Iidiv_imm (n, l)
@@ -86,26 +85,25 @@ let instr colours frame = function
          Iinc_dec (op, mr, ofs, l)
        )
   | Ertl.Imbinop (op, src, dst, l) ->
-     begin
-       match op, lookup colours src, lookup colours dst with
-       | Mmov, r1, r2 when r1 = r2 ->
-          Igoto l
-       | _, (Spilt _ as r1), (Spilt _ as r2)
-       | Mimul, r1, (Spilt _ as r2) ->
-          read1 colours dst (fun dst_mr ->
-              Imbinop (op, r1, Reg dst_mr, generate (
-              Imbinop (Mmov, Reg dst_mr, r2, l)))
-            )
-       | Mmov, Heap (stack_ofs, heap_ofs), r2 ->
-          let dst_mr, l = write colours dst l in
-          Iload (Register.rbp, stack_ofs, Register.tmp2, generate (
-          Iload (Register.tmp2, heap_ofs, dst_mr, l)))
-       | Mmov, r1, Heap (stack_ofs, heap_ofs) ->
-          read1 colours src (fun src_mr ->
-          Iload (Register.rbp, stack_ofs, Register.tmp2, generate (
-          Istore (src_mr, Register.tmp2, heap_ofs, l))))
-       | _, r1, r2 ->
-          Imbinop (op, r1, r2, l)
+     begin match op, lookup colours src, lookup colours dst with
+     | Mmov, r1, r2 when r1 = r2 ->
+        Igoto l
+     | _, (Spilt _ as r1), (Spilt _ as r2)
+     | Mimul, r1, (Spilt _ as r2) ->
+        read1 colours dst (fun dst_mr ->
+            Imbinop (op, r1, Reg dst_mr, generate (
+            Imbinop (Mmov, Reg dst_mr, r2, l)))
+          )
+     | Mmov, Heap (stack_ofs, heap_ofs), r2 ->
+        let dst_mr, l = write colours dst l in
+        Iload (Register.rbp, stack_ofs, Register.tmp2, generate (
+        Iload (Register.tmp2, heap_ofs, dst_mr, l)))
+     | Mmov, r1, Heap (stack_ofs, heap_ofs) ->
+        read1 colours src (fun src_mr ->
+            Iload (Register.rbp, stack_ofs, Register.tmp2, generate (
+            Istore (src_mr, Register.tmp2, heap_ofs, l))))
+     | _, r1, r2 ->
+        Imbinop (op, r1, r2, l)
      end
   | Ertl.Imubranch (op, r, true_l, false_l) ->
      Imubranch (op, lookup colours r, true_l, false_l)
@@ -165,12 +163,15 @@ let instr colours frame = function
 let funct (f:Ertl.efundef) =
   let live = Liveness.perform_analysis f.body in
   let intf_graph = Interference.build_graph live in
-  let colours, n_locals = Colouring.alloc_registers Register.allocable f.stored_locals intf_graph
+  let colours, n_locals =
+    Colouring.alloc_registers Register.allocable f.stored_locals intf_graph
   in
   heap_regs := f.stored_locals;
   let n_stack_params = max 0 (f.formals - List.length Register.parameters) in
-  let frame =
-    { f_params = Utils.word_size * n_stack_params; f_locals = Utils.word_size * n_locals }
+  let frame = {
+      f_params = Utils.word_size * n_stack_params;
+      f_locals = Utils.word_size * n_locals
+    }
   in
   Label.M.iter (fun l i ->
       let i = instr colours frame i in
