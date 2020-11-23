@@ -5,7 +5,7 @@ TEST = ./test.sh
 FLAGS = -use-ocamlfind -use-menhir -I src -I lib
 OCB = ocamlbuild $(FLAGS)
 
-.PHONY: all clean debug sanity test-syntax test-typing test-compil test
+.PHONY: all clean sanity test-syntax test-typing test-compil test
 
 .SUFFIXES: .mli .ml .cmi .cmo .mll .mly
 

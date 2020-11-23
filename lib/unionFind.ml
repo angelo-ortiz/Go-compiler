@@ -24,13 +24,13 @@ let info_of_repr elt =
 let link rep1 rep2 =
   let info1 = info_of_repr rep1 in
   let info2 = info_of_repr rep2 in
-  if info1.rank <= info2.rank then
-    rep1.link <- Child rep2
-  else begin
+  if info1.rank <= info2.rank then begin
+      rep1.link <- Child rep2;
+      if info2.rank = info1.rank then
+        info2.rank <- succ info2.rank
+  end else begin
       rep2.link <- Child rep1;
-      info1.contents <- info2.contents;
-      if info1.rank = info2.rank then
-        info1.rank <- succ info1.rank
+      info1.contents <- info2.contents
   end
   
 let rec find elt =
